@@ -39,23 +39,7 @@ namespace Scriban.Runtime
             var scriptObject = value as ScriptObject;
             if (scriptObject != null)
             {
-                var result = new StringBuilder();
-                result.Append("{");
-                bool isFirst = true;
-                foreach (var item in scriptObject)
-                {
-                    if (!isFirst)
-                    {
-                        result.Append(", ");
-                    }
-                    var keyPair = (KeyValuePair<string, object>) item;
-                    result.Append(keyPair.Key);
-                    result.Append(": ");
-                    result.Append(ToString(span, keyPair.Value));
-                    isFirst = false;
-                }
-                result.Append("}");
-                return result.ToString();
+                return scriptObject.ToString(span);
             }
 
             var type = value.GetType();
@@ -71,7 +55,14 @@ namespace Scriban.Runtime
                 }
             }
 
-            // Dump an enumeration
+            // If the value is formattable, use the formatter directly
+            var fomattable = value as IFormattable;
+            if (fomattable != null)
+            {
+                return fomattable.ToString();
+            }
+
+            // If we have an enumeration, we dump it
             var enumerable = value as IEnumerable;
             if (enumerable != null)
             {
@@ -91,6 +82,7 @@ namespace Scriban.Runtime
                 return result.ToString();
             }
 
+            // Else just end-up trying to emit the ToString
             return value.ToString();
         }
 

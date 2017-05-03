@@ -1,19 +1,19 @@
 ﻿// Copyright (c) Alexandre Mutel. All rights reserved.
 // Licensed under the BSD-Clause 2 license. See license.txt file in the project root for full license information.
-using System;
+
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
-using Scriban.Runtime;
+using Scriban.Helpers;
 
-namespace Scriban.Helpers
+namespace Scriban.Runtime
 {
     /// <summary>
     /// Object functions available through the object 'object' in scriban.
     /// </summary>
-    public static class ObjectFunctions
+    public class ObjectFunctions : ScriptObject
     {
-        public static IEnumerable<object> Keys(IDictionary<string, object> dictionary)
+        public new static IEnumerable<object> Keys(IDictionary<string, object> dictionary)
         {
             if (dictionary == null)
             {
@@ -26,7 +26,7 @@ namespace Scriban.Helpers
             }
         }
 
-        public static IEnumerable<object> Values(IDictionary<string, object> dictionary)
+        public new static IEnumerable<object> Values(IDictionary<string, object> dictionary)
         {
             if (dictionary == null)
             {
@@ -75,18 +75,6 @@ namespace Scriban.Helpers
             }
 
             return "object";
-        }
-
-        /// <summary>
-        /// Registers the builtins provided by this class to the specified <see cref="ScriptObject"/>.
-        /// </summary>
-        /// <param name="builtins">The builtins object.</param>
-        /// <exception cref="System.ArgumentNullException">If builtins is null</exception>
-        [ScriptMemberIgnore]
-        public static void Register(ScriptObject builtins)
-        {
-            if (builtins == null) throw new ArgumentNullException(nameof(builtins));
-            builtins.SetValue("object", ScriptObject.From(typeof(ObjectFunctions)), true);
         }
     }
 }

@@ -109,19 +109,28 @@ comment ## }}
 
 ### 3.1 Strings
 
-A string in scriban `{{ "Hello String" }}` is similar to a javascript string, enclosed by double quotes `"..."` or single quotes `'...'`. The difference is that scriban strings support multilines (character `\n` inside a string)
+Scriban supports two types of strings:
 
-A string supports the following escape characters:
-
-- `\'` single quote
-- `\"` double quote
-- `\\` backslash
-- `\n` new line
-- `\r` carriage return
-- `\t` tab
-- `\b` backspace
-- `\f` form feed
-- `\uxxxx` where xxxx is a unicode hexa code number `0000` to `ffff` 
+- **regular strings** enclosed by double quotes `"..."` or simple quotes `'...'`. Regular strings supports multiline and will interpret the following escape sequences:
+  - `\'` single quote
+  - `\"` double quote
+  - `\\` backslash
+  - `\n` new line
+  - `\r` carriage return
+  - `\t` tab
+  - `\b` backspace
+  - `\f` form feed
+  - `\uxxxx` where xxxx is a unicode hexa code number `0000` to `ffff` 
+- **verbatim strings** enclosed by backstick quotes `` `...` ``. They are, for example, useful to use with for regex patterns :
+  ``` 
+  {{ "this is a text" | regex.split `\s+` }}
+  ``` 
+  
+  will output:
+  
+  ``` 
+  [this, is, a, test]
+  ``` 
 
 ### 3.2 Numbers
 
@@ -398,7 +407,7 @@ A function can be called by passing parameters separated by a whitespace:
 
 The pipe operator `|` can also be used to pipe the result of an expression to a function:
 
-`{{ date.parse '2016/01/05' | date.to_string '%g' }}` will output `06 Jan @016`
+`{{ date.parse '2016/01/05' | date.to_string '%g' }}` will output `06 Jan 2016`
 
 ## 9 Statements
 
@@ -1129,7 +1138,70 @@ Will output:
 This is a test truncated...
 ```
 
-### 10.4 Object
+### 10.4 Regex
+
+
+#### `regex.replace <pattern> <replacement> <input>`
+
+Allows to replace a string by matching with a regex pattern. The replacement string can use replacement groups `\1` if the pattern was using groups.
+
+``` 
+{{ "this is a teeeeeeeeeeext" | regex.replace "te+xt" "text" }}
+``` 
+
+Will output:
+
+``` 
+this is a text
+``` 
+
+#### `regex.split <pattern> <input>`
+
+Split an input string using a regex pattern.
+
+``` 
+{{ "this   is  \t   a  \t   text" | regex.split `\s+` }}
+``` 
+
+Will output:
+
+``` 
+[this, is, a, text]
+``` 
+
+#### `regex.match <pattern> <input>`
+
+Matches a string against a regex pattern and returns an array of strings matched. The first element in the array is the full string being matched and above the groups matched.
+
+```
+{{ "this is a text123" | regex.match `(\w+) a ([a-z]+\d+)` }}
+```
+
+Will output:
+
+``` 
+[is a text123, is, text123]
+``` 
+
+If no match are found, an empty array `[]` is returned.
+
+#### `regex.escape <input>` and `regex.unescape <input>` 
+
+Respectively escape and unescape a regex pattern.
+
+```
+{{ "..." | regex.escape }}
+{{ `\.\.\.` | regex.unescape }}
+```
+
+Will output:
+
+```
+\.\.\.
+...
+```
+
+### 10.5 Object
 
 #### `typeof <value>`
 
@@ -1161,7 +1233,7 @@ object
 object
 ```
 
-### 10.4 Datetime
+### 10.6 Datetime
 
 #### Datetime object
 
@@ -1236,30 +1308,47 @@ Will output:
 
 Converts a datetime object to a textual representation using the specified format string.
 
-Using `date.now` that would return the date `2013-09-12 22:49:27 +0530`
+By default, if you are using a date, it will use the format specified by `date.format` which defaults to `date.default_format` (readonly) which default to `%d %b %Y`
 
-| Format  | Output  | Description
-| --------|---------|------------
-|  `"%H"` |  `"22"` | Hour of the time in 24 hour clock format
-|  `"%I"` |  `"10"` 	    | Hour of the time in 12 hour clock format
-|  `"%M"` |  `"49"` 	    | Minutes of the time
-|  `"%S"` |  `"27"` 	    | Seconds of the time
-|  `"%Y"` |  `"2013"`     | Year of the time
-|  `"%m"` |  `"09"` 	    | month of the time
-|  `"%d"` |  `"12"` 	    | day of month of the time
-|  `"%w"` |  `"4"` 	    | day of week of the time
-|  `"%a"` |  `"Thu"` 	    | name of week day in short form of the
-|  `"%A"` |  `"Thursday"` | week day in full form of the time
-|  `"%b"` |  `"Sep"` 	    | month in short form of the time
-|  `"%B"` |  `"September"`| month in full form of the time
-|  `"%y"` |  `"13"` 	    | Gives year without century of the time
-|  `"%Y"` |  `"2013"`     | Gives year without century of the time
-|  `"%Z"` |  `"IST"` 	    | Gives Time Zone of the time
-|  `"%p"` |  `"PM"` 	    | Gives AM / PM of the time
+You can override the format used for formatting all dates by assigning the a new format: `date.format = '%a %b %e %T %Y';`
 
-Note that the format is using the ruby format ([source](https://hackhands.com/format-datetime-ruby/))
+You can recover the default format by using `date.format = date.default_format;`
 
-By default, if no format is passed, the default format will be: `%d %b %Y`
+By default, the to_string format is using the **current culture**, but you can switch to an invariant culture by using the modifier `%g`
+
+For example, using `%g %d %b %Y` will output the date using an invariant culture.
+
+If you are using `%g` alone, it will output the date with `date.format` using an invariant culture.
+
+Suppose that `date.now` would return the date `2013-09-12 22:49:27 +0530`, the following table explains the format modifiers:
+
+| Format | Result        | Description
+|--------|---------------|--------------------------------------------
+| `"%a"` |  `"Thu"` 	   | Name of week day in short form of the
+| `"%A"` |  `"Thursday"` | Week day in full form of the time
+| `"%b"` |  `"Sep"` 	   | Month in short form of the time
+| `"%B"` |  `"September"`| Month in full form of the time
+| `"%c"` |               | Date and time (%a %b %e %T %Y)
+| `"%d"` |  `"12"` 	     | Day of the month of the time
+| `"%e"` |  `"12"`       | Day of the month, blank-padded ( 1..31)
+| `"%H"` |  `"22"`       | Hour of the time in 24 hour clock format
+| `"%I"` |  `"10"` 	     | Hour of the time in 12 hour clock format
+| `"%j"` |               | Day of the year (001..366) (3 digits, left padded with zero)
+| `"%m"` |  `"09"` 	     | Month of the time
+| `"%M"` |  `"49"` 	     | Minutes of the time (2 digits, left padded with zero e.g 01 02)
+| `"%p"` |  `"PM"` 	     | Gives AM / PM of the time
+| `"%S"` |  `"27"` 	     | Seconds of the time
+| `"%U"` |               | Week number of the current year, starting with the first Sunday as the first day of the first week (00..53)
+| `"%W"` |               | Week number of the current year, starting with the first Monday as the first day of the first week (00..53)
+| `"%w"` |  `"4"` 	     | Day of week of the time
+| `"%x"` |               | Preferred representation for the date alone, no time
+| `"%X"` |               | Preferred representation for the time alone, no date
+| `"%y"` |  `"13"` 	     | Gives year without century of the time
+| `"%Y"` |  `"2013"`     | Year of the time
+| `"%Z"` |  `"IST"` 	   | Gives Time Zone of the time
+| `"%%"` |  `"%"`        | Output the character `%`
+
+Note that the format is using a good part of the ruby format ([source](http://apidock.com/ruby/DateTime/strftime))
 
 ```
 date.now | date.to_string `%d %b %Y`
@@ -1271,7 +1360,7 @@ will output:
 5 Jan 2016
 ```
 
-### 10.5 Timespan
+### 10.7 Timespan
 
 #### Timespan object
 

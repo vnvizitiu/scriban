@@ -2,43 +2,42 @@
 // Licensed under the BSD-Clause 2 license. See license.txt file in the project root for full license information.
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
 using NUnit.Framework;
+using Scriban.Helpers;
 using Scriban.Parsing;
 using Scriban.Runtime;
 
 namespace Scriban.Tests
 {
-    public static class MathObject
-    {
-        public const double PI = Math.PI;
-
-        public static double Cos(double value)
-        {
-            return Math.Cos(value);
-        }
-
-        public static double Sin(double value)
-        {
-            return Math.Sin(value);
-        }
-
-        public static double Round(double value)
-        {
-            return Math.Round(value);
-        }
-    }
-
-
     [TestFixture]
     public class TestParser
     {
         private const string RelativeBasePath = @"..\..\TestFiles";
         private const string InputFilePattern = "*.txt";
         private const string OutputEndFileExtension = ".out.txt";
+
+        [Test]
+        public void TestDateNow()
+        {
+            // default is dd MM yyyy
+            var dateNow = DateTime.Now.ToString("dd MMM yyyy", CultureInfo.CurrentCulture);
+            var template = ParseTemplate(@"{{ date.now }}");
+            var result = template.Render();
+            Assert.AreEqual(dateNow, result);
+
+            template = ParseTemplate(@"{{ date.format = '%Y'; date.now }}");
+            result = template.Render();
+            Assert.AreEqual(DateTime.Now.ToString("yyyy", CultureInfo.CurrentCulture), result);
+
+            template = ParseTemplate(@"{{ date.format = '%Y'; date.now | date.add_years 1 }}");
+            result = template.Render();
+            Assert.AreEqual(DateTime.Now.AddYears(1).ToString("yyyy", CultureInfo.CurrentCulture), result);
+        }
 
         [Test]
         public void TestHelloWorld()
@@ -51,15 +50,17 @@ namespace Scriban.Tests
         [Test]
         public void TestFrontMatter()
         {
-            var options = new ParserOptions() {Mode = ScriptMode.FrontMatter};
-            var template = ParseTemplate(@"{{ 
+            var options = new LexerOptions() {Mode = ScriptMode.FrontMatterAndContent};
+            var input = @"+++
 variable = 1
 name = 'yes'
-}}
++++
 This is after the frontmatter: {{ name }}
 {{
 variable + 1
-}}", options);
+}}";
+            input = input.Replace("\r\n", "\n");
+            var template = ParseTemplate(input, options);
 
             // Make sure that we have a front matter
             Assert.NotNull(template.Page.FrontMatter);
@@ -73,14 +74,69 @@ variable + 1
             // Evaluate page-content
             context.Evaluate(template.Page);
             var pageResult = context.Output.ToString();
-            Assert.AreEqual(@"This is after the frontmatter: yes
-2", pageResult);
+            TextAssert.AreEqual("This is after the frontmatter: yes\n2", pageResult);
+        }
+
+
+        [Test]
+        public void TestFrontMatterOnly()
+        {
+            var options = new ParserOptions();
+
+            var input = @"+++
+variable = 1
+name = 'yes'
++++
+This is after the frontmatter: {{ name }}
+{{
+variable + 1
+}}";
+            input = input.Replace("\r\n", "\n");
+
+            var lexer = new Lexer(input, null, new LexerOptions() { Mode = ScriptMode.FrontMatterOnly });
+            var parser = new Parser(lexer, options);
+
+            var page = parser.Run();
+            foreach (var message in parser.Messages)
+            {
+                Console.WriteLine(message);
+            }
+            Assert.False(parser.HasErrors);
+
+            // Check that the parser finished parsing on the first code exit }}
+            // and hasn't tried to run the lexer on the remaining text
+            Assert.AreEqual(new TextPosition(30, 3, 0), parser.CurrentSpan.Start);
+            Assert.AreEqual(new TextPosition(33, 3, 3), parser.CurrentSpan.End);
+
+            var startPositionAfterFrontMatter = parser.CurrentSpan.End.NextLine();
+
+            // Make sure that we have a front matter
+            Assert.NotNull(page.FrontMatter);
+            Assert.AreEqual(0, page.Statements.Count);
+
+            var context = new TemplateContext();
+
+            // Evaluate front-matter
+            var frontResult = context.Evaluate(page.FrontMatter);
+            Assert.Null(frontResult);
+
+            lexer = new Lexer(input, null, new LexerOptions() { StartPosition =  startPositionAfterFrontMatter });
+            parser = new Parser(lexer);
+            page = parser.Run();
+            foreach (var message in parser.Messages)
+            {
+                Console.WriteLine(message);
+            }
+            Assert.False(parser.HasErrors);
+            context.Evaluate(page);
+            var pageResult = context.Output.ToString();
+            TextAssert.AreEqual("This is after the frontmatter: yes\n2", pageResult);
         }
 
         [Test]
         public void TestScriptOnly()
         {
-            var options = new ParserOptions() { Mode = ScriptMode.ScriptOnly };
+            var options = new LexerOptions() { Mode = ScriptMode.ScriptOnly };
             var template = ParseTemplate(@"
 variable = 1
 name = 'yes'
@@ -102,9 +158,9 @@ name = 'yes'
             Assert.AreEqual(1, value);
         }
 
-        private static Template ParseTemplate(string text, ParserOptions options = null)
+        private static Template ParseTemplate(string text, LexerOptions lexerOptions = default(LexerOptions), ParserOptions parserOptions = null)
         {
-            var template = Template.Parse(text, "text", options);
+            var template = Template.Parse(text, "text", parserOptions, lexerOptions);
             foreach (var message in template.Messages)
             {
                 Console.WriteLine(message);

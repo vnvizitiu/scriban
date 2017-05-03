@@ -1,20 +1,26 @@
 ﻿// Copyright (c) Alexandre Mutel. All rights reserved.
 // Licensed under the BSD-Clause 2 license. See license.txt file in the project root for full license information.
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Scriban.Parsing;
-using Scriban.Runtime;
 
-namespace Scriban.Helpers
+namespace Scriban.Runtime
 {
     /// <summary>
     /// Array functions available through the object 'array' in scriban.
     /// </summary>
-    public static class ArrayFunctions
+    public class ArrayFunctions : ScriptObject
     {
+        public ArrayFunctions()
+        {
+            SetValue("sort", new DelegateCustomFunction(Sort), true);
+            SetValue("map", new DelegateCustomFunction(Map), true);
+        }
+
         public static string Join(string delimiter, IEnumerable enumerable)
         {
             var text = new StringBuilder();
@@ -219,8 +225,26 @@ namespace Scriban.Helpers
                     var leftAccessor = context.GetMemberAccessor(a);
                     var rightAccessor = context.GetMemberAccessor(b);
 
-                    return Comparer<object>.Default.Compare(leftAccessor?.GetValue(a, member),
-                        rightAccessor?.GetValue(b, member));
+
+                    object leftValue = null;
+                    object rightValue = null;
+                    if (leftAccessor != null)
+                    {
+                        if (!leftAccessor.TryGetValue(a, member, out leftValue))
+                        {
+                            context.TryGetMember?.Invoke(a, member, out leftValue);
+                        }
+                    }
+
+                    if (rightAccessor != null)
+                    {
+                        if (!rightAccessor.TryGetValue(b, member, out rightValue))
+                        {
+                            context.TryGetMember?.Invoke(b, member, out rightValue);
+                        }
+                    }
+
+                    return Comparer<object>.Default.Compare(leftValue, rightValue);
                 });
             }
 
@@ -249,25 +273,12 @@ namespace Scriban.Helpers
                 var itemAccessor = context.GetMemberAccessor(item);
                 if (itemAccessor.HasMember(item, member))
                 {
-                    yield return itemAccessor.GetValue(item, member);
+                    object value = null;
+                    itemAccessor.TryGetValue(item, member, out value);
+
+                    yield return value;
                 }
             }
-        }
-
-        /// <summary>
-        /// Registers the builtins provided by this class to the specified <see cref="ScriptObject"/>.
-        /// </summary>
-        /// <param name="builtins">The builtins object.</param>
-        /// <exception cref="System.ArgumentNullException">If builtins is null</exception>
-        [ScriptMemberIgnore]
-        public static void Register(ScriptObject builtins)
-        {
-            if (builtins == null) throw new ArgumentNullException(nameof(builtins));
-            var arrayObject = ScriptObject.From(typeof (ArrayFunctions));
-            arrayObject.SetValue("sort", new DelegateCustomFunction(Sort), true);
-            arrayObject.SetValue("map", new DelegateCustomFunction(Map), true);
-
-            builtins.SetValue("array", arrayObject, true);
         }
 
         private static object Sort(TemplateContext context, ScriptNode callerContext, ScriptArray parameters)

@@ -46,6 +46,8 @@ List of all the builtin <date> functions:
  add_months
  add_seconds
  add_years
+ default_format
+ format
  now
  parse
  to_string
@@ -63,3 +65,10 @@ List of all the builtin <object> functions:
  keys
  typeof
  values
+
+List of all the builtin <regex> functions:
+ escape
+ match
+ replace
+ split
+ unescape
