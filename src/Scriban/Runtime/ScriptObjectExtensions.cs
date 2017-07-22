@@ -1,10 +1,10 @@
 ﻿// Copyright (c) Alexandre Mutel. All rights reserved.
-// This file is licensed under the BSD-Clause 2 license. 
-// See the license.txt file in the project root for more information.
-
+// Licensed under the BSD-Clause 2 license. 
+// See license.txt file in the project root for full license information.
 using System;
 using System.Reflection;
 using Scriban.Helpers;
+using Scriban.Model;
 
 namespace Scriban.Runtime
 {
@@ -13,14 +13,25 @@ namespace Scriban.Runtime
     /// </summary>
     public static class ScriptObjectExtensions
     {
-        internal static readonly IMemberAccessor Accessor = new ScriptObjectAccessor();
-
         /// <summary>
         /// Allows to filter a member.
         /// </summary>
         /// <param name="member">The member.</param>
         /// <returns></returns>
         public delegate bool FilterMemberDelegate(string member);
+
+        /// <summary>
+        /// Asserts that the specified script object is not readonly or throws a <see cref="ScriptObjectReadOnlyException"/>
+        /// </summary>
+        /// <param name="scriptObject">The script object.</param>
+        /// <exception cref="ScriptObjectReadOnlyException">If the object is not readonly</exception>
+        public static void AssertNotReadOnly(this IScriptObject scriptObject)
+        {
+            if (scriptObject.IsReadOnly)
+            {
+                throw new ScriptObjectReadOnlyException(scriptObject);
+            }
+        }
 
         /// <summary>
         /// Imports the specified object intto this <see cref="ScriptObject"/> context. See remarks.
@@ -53,7 +64,7 @@ namespace Scriban.Runtime
         /// <returns><c>true</c> if the value could be set; <c>false</c> if a value already exist an is readonly</returns>
         public static bool TrySetValue(this IScriptObject @this, string member, object value, bool readOnly)
         {
-            if (@this.IsReadOnly(member))
+            if (!@this.CanWrite(member))
             {
                 return false;
             }
@@ -73,16 +84,17 @@ namespace Scriban.Runtime
             }
 
             var thisScript = @this.GetScriptObject();
+            AssertNotReadOnly(thisScript);
             var otherScript = other.GetScriptObject();
 
-            foreach (var keyValue in otherScript.store)
+            foreach (var keyValue in otherScript.Store)
             {
                 var member = keyValue.Key;
-                if (thisScript.IsReadOnly(member))
+                if (!thisScript.CanWrite(member))
                 {
                     continue;
                 }
-                thisScript.store[keyValue.Key] = keyValue.Value;
+                thisScript.Store[keyValue.Key] = keyValue.Value;
             }
         }
 
@@ -247,31 +259,6 @@ namespace Scriban.Runtime
             if (function == null) throw new ArgumentNullException(nameof(function));
 
             script.SetValue(member, new ObjectFunctionWrapper(function.Target, function.GetMethodInfo()), true);
-        }
-
-        private class ScriptObjectAccessor : IMemberAccessor
-        {
-            public bool HasMember(object target, string member)
-            {
-                return ((IScriptObject)target).Contains(member);
-            }
-
-            public bool TryGetValue(object target, string member, out object value)
-            {
-                return ((IScriptObject)target).TryGetValue(member, out value);
-            }
-
-            public bool HasReadonly => true;
-
-            public bool TrySetValue(object target, string member, object value)
-            {
-                return ((IScriptObject)target).TrySetValue(member, value, false);
-            }
-
-            public void SetReadOnly(object target, string member, bool isReadOnly)
-            {
-                ((IScriptObject)target).SetReadOnly(member, isReadOnly);
-            }
         }
 
         private class ObjectFunctionWrapper : IScriptCustomFunction

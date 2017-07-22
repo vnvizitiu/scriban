@@ -1,5 +1,6 @@
 ﻿// Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license. See license.txt file in the project root for full license information.
+// Licensed under the BSD-Clause 2 license. 
+// See license.txt file in the project root for full license information.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -7,9 +8,12 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using Scriban.Functions;
 using Scriban.Helpers;
+using Scriban.Model;
 using Scriban.Parsing;
 using Scriban.Runtime;
+using Scriban.Runtime.Accessors;
 
 namespace Scriban
 {
@@ -18,19 +22,19 @@ namespace Scriban
     /// </summary>
     public class TemplateContext
     {
-        private readonly Stack<ScriptObject> availableStores;
+        private readonly Stack<ScriptObject> _availableStores;
         internal readonly Stack<ScriptBlockStatement> BlockDelegates;
-        private readonly Stack<IScriptObject> globalStores;
-        private readonly Dictionary<Type, IListAccessor> listAccessors;
-        private readonly Stack<ScriptObject> localStores;
-        private readonly Stack<ScriptLoopStatementBase> loops;
-        private readonly Stack<ScriptObject> loopStores;
-        private readonly Dictionary<Type, IMemberAccessor> memberAccessors;
-        private readonly Stack<StringBuilder> outputs;
-        private readonly Stack<string> sourceFiles;
-        private int functionDepth = 0;
-        private bool isFunctionCallDisabled;
-        private int loopStep = 0;
+        private readonly Stack<IScriptObject> _globalStores;
+        private readonly Dictionary<Type, IListAccessor> _listAccessors;
+        private readonly Stack<ScriptObject> _localStores;
+        private readonly Stack<ScriptLoopStatementBase> _loops;
+        private readonly Stack<ScriptObject> _loopStores;
+        private readonly Dictionary<Type, IObjectAccessor> _memberAccessors;
+        private readonly Stack<StringBuilder> _outputs;
+        private readonly Stack<string> _sourceFiles;
+        private int _functionDepth;
+        private bool _isFunctionCallDisabled;
+        private int _loopStep;
 
         /// <summary>
         /// A delegate used to late binding <see cref="TryGetMember"/>
@@ -62,24 +66,24 @@ namespace Scriban
 
             TemplateLoaderParserOptions = new ParserOptions();
 
-            outputs = new Stack<StringBuilder>();
-            outputs.Push(new StringBuilder());
+            _outputs = new Stack<StringBuilder>();
+            _outputs.Push(new StringBuilder());
 
-            globalStores = new Stack<IScriptObject>();
-            localStores = new Stack<ScriptObject>();
-            loopStores = new Stack<ScriptObject>();
-            availableStores = new Stack<ScriptObject>();
+            _globalStores = new Stack<IScriptObject>();
+            _localStores = new Stack<ScriptObject>();
+            _loopStores = new Stack<ScriptObject>();
+            _availableStores = new Stack<ScriptObject>();
 
-            sourceFiles = new Stack<string>();
+            _sourceFiles = new Stack<string>();
 
-            memberAccessors = new Dictionary<Type, IMemberAccessor>();
-            listAccessors = new Dictionary<Type, IListAccessor>();
-            loops = new Stack<ScriptLoopStatementBase>();
+            _memberAccessors = new Dictionary<Type, IObjectAccessor>();
+            _listAccessors = new Dictionary<Type, IListAccessor>();
+            _loops = new Stack<ScriptLoopStatementBase>();
             PipeArguments = new Stack<ScriptExpression>();
 
             BlockDelegates = new Stack<ScriptBlockStatement>();
 
-            isFunctionCallDisabled = false;
+            _isFunctionCallDisabled = false;
 
             CachedTemplates = new Dictionary<string, Template>();
 
@@ -106,7 +110,7 @@ namespace Scriban
         /// <summary>
         /// Gets the current output of the template being rendered (via <see cref="Template.Render(Scriban.TemplateContext)")/>.
         /// </summary>
-        public StringBuilder Output => outputs.Peek();
+        public StringBuilder Output => _outputs.Peek();
 
         /// <summary>
         /// Gets the result of the last expression.
@@ -118,7 +122,7 @@ namespace Scriban
         /// <summary>
         /// Gets the current global <see cref="ScriptObject"/>.
         /// </summary>
-        public IScriptObject CurrentGlobal => globalStores.Peek();
+        public IScriptObject CurrentGlobal => _globalStores.Peek();
 
         /// <summary>
         /// Gets the cached templates, used by the include function.
@@ -128,7 +132,7 @@ namespace Scriban
         /// <summary>
         /// Gets the current source file.
         /// </summary>
-        public string CurrentSourceFile => sourceFiles.Peek();
+        public string CurrentSourceFile => _sourceFiles.Peek();
 
         /// <summary>
         /// Gets or sets a callback function that is called when a variable is being resolved and was not found from any scopes.
@@ -155,7 +159,7 @@ namespace Scriban
         /// <value>
         ///   <c>true</c> if [in loop]; otherwise, <c>false</c>.
         /// </value>
-        internal bool IsInLoop => loops.Count > 0;
+        internal bool IsInLoop => _loops.Count > 0;
 
         /// <summary>
         /// Pushes the source file path being executed. This should have enough information so that template loading/include can work correctly.
@@ -164,7 +168,7 @@ namespace Scriban
         public void PushSourceFile(string sourceFile)
         {
             if (sourceFile == null) throw new ArgumentNullException(nameof(sourceFile));
-            sourceFiles.Push(sourceFile);
+            _sourceFiles.Push(sourceFile);
         }
 
         /// <summary>
@@ -174,11 +178,11 @@ namespace Scriban
         /// <exception cref="System.InvalidOperationException">Cannot PopSourceFile more than PushSourceFile</exception>
         public string PopSourceFile()
         {
-            if (sourceFiles.Count == 0)
+            if (_sourceFiles.Count == 0)
             {
                 throw new InvalidOperationException("Cannot PopSourceFile more than PushSourceFile");
             }
-            return sourceFiles.Pop();
+            return _sourceFiles.Pop();
         }
 
         /// <summary>
@@ -248,7 +252,7 @@ namespace Scriban
         public void PushGlobal(IScriptObject scriptObject)
         {
             if (scriptObject == null) throw new ArgumentNullException(nameof(scriptObject));
-            globalStores.Push(scriptObject);
+            _globalStores.Push(scriptObject);
             PushVariableScope(ScriptVariableScope.Local);
         }
 
@@ -259,11 +263,11 @@ namespace Scriban
         /// <exception cref="System.InvalidOperationException">Unexpected PopGlobal() not matching a PushGlobal</exception>
         public IScriptObject PopGlobal()
         {
-            if (globalStores.Count == 1)
+            if (_globalStores.Count == 1)
             {
                 throw new InvalidOperationException("Unexpected PopGlobal() not matching a PushGlobal");
             }
-            var store = globalStores.Pop();
+            var store = _globalStores.Pop();
             PopVariableScope(ScriptVariableScope.Local);
             return store;
         }
@@ -273,7 +277,7 @@ namespace Scriban
         /// </summary>
         public void PushOutput()
         {
-            outputs.Push(new StringBuilder());
+            _outputs.Push(new StringBuilder());
         }
 
         /// <summary>
@@ -281,12 +285,12 @@ namespace Scriban
         /// </summary>
         public string PopOutput()
         {
-            if (outputs.Count == 1)
+            if (_outputs.Count == 1)
             {
                 throw new InvalidOperationException("Unexpected PopOutput for top level writer");
             }
 
-            return outputs.Pop().ToString();
+            return _outputs.Pop().ToString();
         }
 
         /// <summary>
@@ -342,10 +346,10 @@ namespace Scriban
         /// </remarks>
         public object Evaluate(ScriptNode scriptNode, bool aliasReturnedFunction)
         {
-            var previousFunctionCallState = isFunctionCallDisabled;
+            var previousFunctionCallState = _isFunctionCallDisabled;
             try
             {
-                isFunctionCallDisabled = aliasReturnedFunction;
+                _isFunctionCallDisabled = aliasReturnedFunction;
                 scriptNode?.Evaluate(this);
                 var result = Result;
                 Result = null;
@@ -353,7 +357,7 @@ namespace Scriban
             }
             finally
             {
-                isFunctionCallDisabled = previousFunctionCallState;
+                _isFunctionCallDisabled = previousFunctionCallState;
             }
         }
 
@@ -362,7 +366,7 @@ namespace Scriban
         /// </summary>
         /// <param name="target">The target object to get a member accessor.</param>
         /// <returns>A member accessor</returns>
-        public IMemberAccessor GetMemberAccessor(object target)
+        public IObjectAccessor GetMemberAccessor(object target)
         {
             if (target == null)
             {
@@ -370,18 +374,26 @@ namespace Scriban
             }
 
             var type = target.GetType();
-            IMemberAccessor accessor;
-            if (!memberAccessors.TryGetValue(type, out accessor))
+            IObjectAccessor accessor;
+            if (!_memberAccessors.TryGetValue(type, out accessor))
             {
-                if (target is IScriptObject)
-                {
-                    accessor = ScriptObjectExtensions.Accessor;
-                }
-                else if (!DictionaryAccessor.TryGet(type, out accessor))
-                {
-                    accessor = new TypedMemberAccessor(type, MemberRenamer);
-                }
-                memberAccessors.Add(type, accessor);
+                accessor = GetMemberAccessorImpl(target) ?? NullAccessor.Default;
+                _memberAccessors.Add(type, accessor);
+            }
+            return accessor;
+        }
+
+        protected virtual IObjectAccessor GetMemberAccessorImpl(object target)
+        {
+            var type = target.GetType();
+            IObjectAccessor accessor;
+            if (target is IScriptObject)
+            {
+                accessor = ScriptObjectAccessor.Default;
+            }
+            else if (!DictionaryAccessor.TryGet(type, out accessor))
+            {
+                accessor = new TypedObjectAccessor(type, MemberRenamer);
             }
             return accessor;
         }
@@ -398,8 +410,8 @@ namespace Scriban
 
         internal void EnterFunction(ScriptNode caller)
         {
-            functionDepth++;
-            if (functionDepth > RecursiveLimit)
+            _functionDepth++;
+            if (_functionDepth > RecursiveLimit)
             {
                 throw new ScriptRuntimeException(caller.Span, $"Exceeding number of recursive depth limit [{RecursiveLimit}] for function call: [{caller}]"); // unit test: 305-func-error2.txt
             }
@@ -410,18 +422,18 @@ namespace Scriban
         internal void ExitFunction()
         {
             PopVariableScope(ScriptVariableScope.Local);
-            functionDepth--;
+            _functionDepth--;
         }
 
         internal void PushVariableScope(ScriptVariableScope scope)
         {
-            var store = availableStores.Count > 0 ? availableStores.Pop() : new ScriptObject();
-            (scope == ScriptVariableScope.Local ? localStores : loopStores).Push(store);
+            var store = _availableStores.Count > 0 ? _availableStores.Pop() : new ScriptObject();
+            (scope == ScriptVariableScope.Local ? _localStores : _loopStores).Push(store);
         }
 
         internal void PopVariableScope(ScriptVariableScope scope)
         {
-            var stores = (scope == ScriptVariableScope.Local ? localStores : loopStores);
+            var stores = (scope == ScriptVariableScope.Local ? _localStores : _loopStores);
             if (stores.Count == 0)
             {
                 // Should not happen at runtime
@@ -432,30 +444,30 @@ namespace Scriban
             // The store is cleanup once it is pushed back
             store.Clear();
 
-            availableStores.Push(store);
+            _availableStores.Push(store);
         }
 
         internal void EnterLoop(ScriptLoopStatementBase loop)
         {
             if (loop == null) throw new ArgumentNullException(nameof(loop));
-            loops.Push(loop);
+            _loops.Push(loop);
             PushVariableScope(ScriptVariableScope.Loop);
         }
 
         internal void ExitLoop()
         {
             PopVariableScope(ScriptVariableScope.Loop);
-            loops.Pop();
+            _loops.Pop();
         }
 
         internal bool StepLoop()
         {
-            Debug.Assert(loops.Count > 0);
+            Debug.Assert(_loops.Count > 0);
 
-            loopStep++;
-            if (loopStep > LoopLimit)
+            _loopStep++;
+            if (_loopStep > LoopLimit)
             {
-                var currentLoopStatement = loops.Peek();
+                var currentLoopStatement = _loops.Peek();
 
                 throw new ScriptRuntimeException(currentLoopStatement.Span, $"Exceeding number of iteration limit [{LoopLimit}] for statement: {currentLoopStatement}"); // unit test: 215-for-statement-error1.txt
             }
@@ -487,142 +499,159 @@ namespace Scriban
         {
             object value = null;
 
-            var nextVariable = targetExpression as ScriptVariable;
-            if (nextVariable != null)
+            try
             {
-                if (setter)
+
+                var nextVariable = targetExpression as ScriptVariable;
+                if (nextVariable != null)
                 {
-                    SetValue(nextVariable, valueToSet, false);
-                }
-                else
-                {
-                    value = GetValueInternal(nextVariable);
-                }
-            }
-            else
-            {
-                var nextDot = targetExpression as ScriptMemberExpression;
-                if (nextDot != null)
-                {
-                    var targetObject = GetOrSetValue(nextDot.Target, valueToSet, false, level + 1);
-
-                    if (targetObject == null)
-                    {
-                        throw new ScriptRuntimeException(nextDot.Span, $"Object [{nextDot.Target}] is null. Cannot access member: {nextDot}"); // unit test: 131-member-accessor-error1.txt
-                    }
-
-                    if (targetObject is string || targetObject.GetType().GetTypeInfo().IsPrimitive)
-                    {
-                        throw new ScriptRuntimeException(nextDot.Span, $"Cannot get or set a member on the primitive [{targetObject}/{targetObject.GetType()}] when accessing member: {nextDot}"); // unit test: 132-member-accessor-error2.txt
-                    }
-
-                    var accessor = GetMemberAccessor(targetObject);
-
-                    var memberName = nextDot.Member.Name;
-
                     if (setter)
                     {
-                        if (!accessor.TrySetValue(targetObject, memberName, valueToSet))
-                        {
-                            throw new ScriptRuntimeException(nextDot.Member.Span, $"Cannot set a value for the readonly member: {nextDot}"); // unit test: 132-member-accessor-error3.txt
-                        }
+                        SetValue(nextVariable, valueToSet, false);
                     }
                     else
                     {
-                        if (!accessor.TryGetValue(targetObject, memberName, out value))
-                        {
-                            TryGetMember?.Invoke(targetObject, memberName, out value);
-                        }
+                        value = GetValueInternal(nextVariable);
                     }
                 }
                 else
                 {
-                    var nextIndexer = targetExpression as ScriptIndexerExpression;
-                    if (nextIndexer != null)
+                    var nextDot = targetExpression as ScriptMemberExpression;
+                    if (nextDot != null)
                     {
-                        var targetObject = GetOrSetValue(nextIndexer.Target, valueToSet, false, level + 1);
+                        var targetObject = GetOrSetValue(nextDot.Target, valueToSet, false, level + 1);
+
                         if (targetObject == null)
                         {
-                            throw new ScriptRuntimeException(nextIndexer.Target.Span, $"Object [{nextIndexer.Target}] is null. Cannot access indexer: {nextIndexer}"); // unit test: 130-indexer-accessor-error1.txt
+                            throw new ScriptRuntimeException(nextDot.Span,
+                                $"Object [{nextDot.Target}] is null. Cannot access member: {nextDot}"); // unit test: 131-member-accessor-error1.txt
+                        }
+
+                        if (targetObject is string || targetObject.GetType().GetTypeInfo().IsPrimitive)
+                        {
+                            throw new ScriptRuntimeException(nextDot.Span,
+                                $"Cannot get or set a member on the primitive [{targetObject}/{targetObject.GetType()}] when accessing member: {nextDot}"); // unit test: 132-member-accessor-error2.txt
+                        }
+
+                        var accessor = GetMemberAccessor(targetObject);
+
+                        var memberName = nextDot.Member.Name;
+
+                        if (setter)
+                        {
+                            if (!accessor.TrySetValue(targetObject, memberName, valueToSet))
+                            {
+                                throw new ScriptRuntimeException(nextDot.Member.Span,
+                                    $"Cannot set a value for the readonly member: {nextDot}"); // unit test: 132-member-accessor-error3.txt
+                            }
                         }
                         else
                         {
-                            var index = this.Evaluate(nextIndexer.Index);
-                            if (index == null)
+                            if (!accessor.TryGetValue(targetObject, memberName, out value))
                             {
-                                throw new ScriptRuntimeException(nextIndexer.Index.Span, $"Cannot access target [{nextIndexer.Target}] with a null indexer: {nextIndexer}"); // unit test: 130-indexer-accessor-error2.txt
+                                TryGetMember?.Invoke(targetObject, memberName, out value);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var nextIndexer = targetExpression as ScriptIndexerExpression;
+                        if (nextIndexer != null)
+                        {
+                            var targetObject = GetOrSetValue(nextIndexer.Target, valueToSet, false, level + 1);
+                            if (targetObject == null)
+                            {
+                                throw new ScriptRuntimeException(nextIndexer.Target.Span,
+                                    $"Object [{nextIndexer.Target}] is null. Cannot access indexer: {nextIndexer}"); // unit test: 130-indexer-accessor-error1.txt
                             }
                             else
                             {
-                                if (targetObject is IDictionary || targetObject is ScriptObject)
+                                var index = this.Evaluate(nextIndexer.Index);
+                                if (index == null)
                                 {
-                                    var accessor = GetMemberAccessor(targetObject);
-                                    var indexAsString = ScriptValueConverter.ToString(nextIndexer.Index.Span, index);
-
-                                    if (setter)
-                                    {
-                                        if (!accessor.TrySetValue(targetObject, indexAsString, valueToSet))
-                                        {
-                                            throw new ScriptRuntimeException(nextIndexer.Index.Span, $"Cannot set a value for the readonly member [{indexAsString}] in the indexer: {nextIndexer.Target}['{indexAsString}']"); // unit test: 130-indexer-accessor-error3.txt
-                                        }
-                                    }
-                                    else
-                                    {
-                                        if (!accessor.TryGetValue(targetObject, indexAsString, out value))
-                                        {
-                                            TryGetMember?.Invoke(targetObject, indexAsString, out value);
-                                        }
-                                    }
+                                    throw new ScriptRuntimeException(nextIndexer.Index.Span,
+                                        $"Cannot access target [{nextIndexer.Target}] with a null indexer: {nextIndexer}"); // unit test: 130-indexer-accessor-error2.txt
                                 }
                                 else
                                 {
-                                    var accessor = GetListAccessor(targetObject);
-                                    if (accessor == null)
+                                    if (targetObject is IDictionary || targetObject is ScriptObject)
                                     {
-                                        throw new ScriptRuntimeException(nextIndexer.Target.Span, $"Expecting a list. Invalid value [{targetObject}/{targetObject?.GetType().Name}] for the target [{nextIndexer.Target}] for the indexer: {nextIndexer}"); // unit test: 130-indexer-accessor-error4.txt
+                                        var accessor = GetMemberAccessor(targetObject);
+                                        var indexAsString =
+                                            ScriptValueConverter.ToString(nextIndexer.Index.Span, index);
+
+                                        if (setter)
+                                        {
+                                            if (!accessor.TrySetValue(targetObject, indexAsString, valueToSet))
+                                            {
+                                                throw new ScriptRuntimeException(nextIndexer.Index.Span,
+                                                    $"Cannot set a value for the readonly member [{indexAsString}] in the indexer: {nextIndexer.Target}['{indexAsString}']"); // unit test: 130-indexer-accessor-error3.txt
+                                            }
+                                        }
+                                        else
+                                        {
+                                            if (!accessor.TryGetValue(targetObject, indexAsString, out value))
+                                            {
+                                                TryGetMember?.Invoke(targetObject, indexAsString, out value);
+                                            }
+                                        }
                                     }
                                     else
                                     {
-                                        int i = ScriptValueConverter.ToInt(nextIndexer.Index.Span, index);
-
-                                        // Allow negative index from the end of the array
-                                        if (i < 0)
+                                        var accessor = GetListAccessor(targetObject);
+                                        if (accessor == null)
                                         {
-                                            i = accessor.GetLength(targetObject) + i;
+                                            throw new ScriptRuntimeException(nextIndexer.Target.Span,
+                                                $"Expecting a list. Invalid value [{targetObject}/{targetObject?.GetType().Name}] for the target [{nextIndexer.Target}] for the indexer: {nextIndexer}"); // unit test: 130-indexer-accessor-error4.txt
                                         }
-
-                                        if (i >= 0)
+                                        else
                                         {
-                                            if (setter)
+                                            int i = ScriptValueConverter.ToInt(nextIndexer.Index.Span, index);
+
+                                            // Allow negative index from the end of the array
+                                            if (i < 0)
                                             {
-                                                accessor.SetValue(targetObject, i, valueToSet);
+                                                i = accessor.GetLength(targetObject) + i;
                                             }
-                                            else
+
+                                            if (i >= 0)
                                             {
-                                                value = accessor.GetValue(targetObject, i);
+                                                if (setter)
+                                                {
+                                                    accessor.SetValue(targetObject, i, valueToSet);
+                                                }
+                                                else
+                                                {
+                                                    value = accessor.GetValue(targetObject, i);
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    else if (!setter)
-                    {
-                        targetExpression.Evaluate(this);
-                        value = this.Result;
-                        this.Result = null;
-                    }
-                    else
-                    {
-                        throw new ScriptRuntimeException(targetExpression.Span, $"Unsupported expression for target for assignment: {targetExpression} = ..."); // unit test: 105-assign-error1.txt
+                        else if (!setter)
+                        {
+                            targetExpression.Evaluate(this);
+                            value = this.Result;
+                            this.Result = null;
+                        }
+                        else
+                        {
+                            throw new ScriptRuntimeException(targetExpression.Span,
+                                $"Unsupported expression for target for assignment: {targetExpression} = ..."); // unit test: 105-assign-error1.txt
+                        }
                     }
                 }
+            }
+            catch (Exception readonlyException) when(level == 0 && !(readonlyException is ScriptRuntimeException))
+            {
+                throw new ScriptRuntimeException(targetExpression.Span, $"Unexpected exception while accessing `{targetExpression}`", readonlyException);
             }
 
             // If the variable being returned is a function, we need to evaluate it
             // If function call is disabled, it will be only when returning the final object (level 0 of recursion)
-            if ((!isFunctionCallDisabled || level > 0) && ScriptFunctionCall.IsFunction(value))
+            if ((!_isFunctionCallDisabled || level > 0) && ScriptFunctionCall.IsFunction(value))
             {
                 value = ScriptFunctionCall.Call(this, targetExpression, value);
             }
@@ -634,7 +663,7 @@ namespace Scriban
         {
             var type = target.GetType();
             IListAccessor accessor;
-            if (!listAccessors.TryGetValue(type, out accessor))
+            if (!_listAccessors.TryGetValue(type, out accessor))
             {
                 if (type.GetTypeInfo().IsArray)
                 {
@@ -644,7 +673,7 @@ namespace Scriban
                 {
                     accessor = ListAccessor.Default;
                 }
-                listAccessors.Add(type, accessor);
+                _listAccessors.Add(type, accessor);
             }
             return accessor;
         }
@@ -654,16 +683,16 @@ namespace Scriban
             var scope = variable.Scope; 
             if (scope == ScriptVariableScope.Global)
             {
-                foreach (var store in globalStores)
+                foreach (var store in _globalStores)
                 {
                     yield return store;
                 }
             }
             else if (scope == ScriptVariableScope.Local)
             {
-                if (localStores.Count > 0)
+                if (_localStores.Count > 0)
                 {
-                    yield return localStores.Peek();
+                    yield return _localStores.Peek();
                 }
                 else
                 {
@@ -672,9 +701,9 @@ namespace Scriban
             }
             else if (scope == ScriptVariableScope.Loop)
             {
-                if (loopStores.Count > 0)
+                if (_loopStores.Count > 0)
                 {
-                    yield return loopStores.Peek();
+                    yield return _loopStores.Peek();
                 }
                 else
                 {

@@ -1,9 +1,11 @@
 ﻿// Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license. See license.txt file in the project root for full license information.
+// Licensed under the BSD-Clause 2 license. 
+// See license.txt file in the project root for full license information.
 using System;
 using System.Collections.Generic;
 using Scriban.Parsing;
 using Scriban.Runtime;
+using Scriban.Model;
 
 namespace Scriban
 {
@@ -12,13 +14,13 @@ namespace Scriban
     /// </summary>
     public class Template
     {
-        private readonly ParserOptions parserOptions;
-        private readonly LexerOptions lexerOptions;
+        private readonly ParserOptions _parserOptions;
+        private readonly LexerOptions _lexerOptions;
 
         private Template(ParserOptions parserOptions, LexerOptions lexerOptions, string sourceFilePath)
         {
-            this.parserOptions = parserOptions == null ? new ParserOptions() : parserOptions.Clone();
-            this.lexerOptions = lexerOptions;
+            this._parserOptions = parserOptions == null ? new ParserOptions() : parserOptions.Clone();
+            this._lexerOptions = lexerOptions;
             Messages = new List<LogMessage>();
             this.SourceFilePath = sourceFilePath;
         }
@@ -128,8 +130,8 @@ namespace Scriban
                 return;
             }
 
-            var lexer = new Lexer(text, sourceFilePath, lexerOptions);
-            var parser = new Parser(lexer, parserOptions);
+            var lexer = new Lexer(text, sourceFilePath, _lexerOptions);
+            var parser = new Parser(lexer, _parserOptions);
 
             Page = parser.Run();
 

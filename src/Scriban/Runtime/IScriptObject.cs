@@ -1,5 +1,8 @@
 // Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license. See license.txt file in the project root for full license information.
+// Licensed under the BSD-Clause 2 license. 
+// See license.txt file in the project root for full license information.
+using System.Collections.Generic;
+
 namespace Scriban.Runtime
 {
     /// <summary>
@@ -16,6 +19,12 @@ namespace Scriban.Runtime
         bool Contains(string member);
 
         /// <summary>
+        /// Gets or sets a value indicating whether this instance is read only.
+        /// </summary>
+        /// <value><c>true</c> if this instance is read only; otherwise, <c>false</c>.</value>
+        bool IsReadOnly { get; set; }
+
+        /// <summary>
         /// Tries the get the value of the specified member.
         /// </summary>
         /// <param name="member">The member.</param>
@@ -30,7 +39,7 @@ namespace Scriban.Runtime
         /// </summary>
         /// <param name="member">The member.</param>
         /// <returns><c>true</c> if the specified member is read-only</returns>
-        bool IsReadOnly(string member);
+        bool CanWrite(string member);
 
         /// <summary>
         /// Sets the value and readonly state of the specified member. This method overrides previous readonly state.

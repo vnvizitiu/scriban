@@ -1,5 +1,6 @@
 // Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license. See license.txt file in the project root for full license information.
+// Licensed under the BSD-Clause 2 license. 
+// See license.txt file in the project root for full license information.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -7,6 +8,7 @@ using System.Linq;
 using Scriban.Helpers;
 using System.Reflection;
 using System.Text;
+using Scriban.Model;
 using Scriban.Parsing;
 
 namespace Scriban.Runtime
@@ -17,7 +19,7 @@ namespace Scriban.Runtime
     /// <seealso cref="System.Collections.IEnumerable" />
     public class ScriptObject : IDictionary<string, object>, IEnumerable, IScriptObject
     {
-        internal readonly Dictionary<string, InternalValue> store;
+        internal readonly Dictionary<string, InternalValue> Store;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ScriptObject"/> class.
@@ -32,7 +34,7 @@ namespace Scriban.Runtime
         /// <param name="autoImportStaticsFromThisType">if set to <c>true</c> it is automatically importing statics members from the derived type.</param>
         public ScriptObject(bool autoImportStaticsFromThisType)
         {
-            store = new Dictionary<string, InternalValue>();
+            Store = new Dictionary<string, InternalValue>();
 
             // Only import if we are asked for and we have a derived type
             if (autoImportStaticsFromThisType || this.GetType() != typeof(ScriptObject))
@@ -46,13 +48,19 @@ namespace Scriban.Runtime
         /// </summary>
         public void Clear()
         {
-            store.Clear();
+            Store.Clear();
         }
 
         /// <summary>
         /// Gets the number of members.
         /// </summary>
-        public int Count => store.Count;
+        public int Count => Store.Count;
+
+        /// <summary>
+        /// Gets a value indicating whether this instance is read-only.
+        /// </summary>
+        /// <value><c>true</c> if this instance is read only; otherwise, <c>false</c>.</value>
+        public virtual bool IsReadOnly { get; set; }
 
         /// <summary>
         /// Determines whether this object contains the specified member.
@@ -60,10 +68,10 @@ namespace Scriban.Runtime
         /// <param name="member">The member.</param>
         /// <returns><c>true</c> if this object contains the specified member; <c>false</c> otherwise</returns>
         /// <exception cref="System.ArgumentNullException">If member is null</exception>
-        public bool Contains(string member)
+        public virtual bool Contains(string member)
         {
             if (member == null) throw new ArgumentNullException(nameof(member));
-            return store.ContainsKey(member);
+            return Store.ContainsKey(member);
         }
 
         /// <summary>
@@ -72,10 +80,10 @@ namespace Scriban.Runtime
         /// <param name="member">The member.</param>
         /// <param name="value">The value.</param>
         /// <returns><c>true</c> if the value was retrieved</returns>
-        public bool TryGetValue(string member, out object value)
+        public virtual bool TryGetValue(string member, out object value)
         {
             InternalValue internalValue;
-            var result = store.TryGetValue(member, out internalValue);
+            var result = Store.TryGetValue(member, out internalValue);
             value = internalValue.Value;
             return result;
         }
@@ -104,7 +112,7 @@ namespace Scriban.Runtime
             return (T)obj;
         }
 
-        public object this[string key]
+        public virtual object this[string key]
         {
             get
             {
@@ -116,15 +124,16 @@ namespace Scriban.Runtime
             set
             {
                 if (key == null) throw new ArgumentNullException(nameof(key));
+                this.AssertNotReadOnly();
                 SetValue(key, value, false);
             }
         }
 
-        public ICollection<string> Keys => store.Keys;
+        public ICollection<string> Keys => Store.Keys;
 
         public ICollection<object> Values
         {
-            get { return store.Values.Select(val => val.Value).ToList(); }
+            get { return Store.Values.Select(val => val.Value).ToList(); }
         }
 
         /// <summary>
@@ -132,11 +141,11 @@ namespace Scriban.Runtime
         /// </summary>
         /// <param name="member">The member.</param>
         /// <returns><c>true</c> if the specified member is read-only</returns>
-        public bool IsReadOnly(string member)
+        public virtual bool CanWrite(string member)
         {
             InternalValue internalValue;
-            store.TryGetValue(member, out internalValue);
-            return internalValue.IsReadOnly;
+            Store.TryGetValue(member, out internalValue);
+            return !internalValue.IsReadOnly;
         }
 
         /// <summary>
@@ -145,9 +154,10 @@ namespace Scriban.Runtime
         /// <param name="member">The member.</param>
         /// <param name="value">The value.</param>
         /// <param name="readOnly">if set to <c>true</c> the value will be read only.</param>
-        public void SetValue(string member, object value, bool readOnly)
+        public virtual void SetValue(string member, object value, bool readOnly)
         {
-            store[member] = new InternalValue(value, readOnly);
+            this.AssertNotReadOnly();
+            Store[member] = new InternalValue(value, readOnly);
         }
 
         public void Add(string key, object value)
@@ -165,9 +175,10 @@ namespace Scriban.Runtime
         /// </summary>
         /// <param name="member">The member.</param>
         /// <returns><c>true</c> if it was removed</returns>
-        public bool Remove(string member)
+        public virtual bool Remove(string member)
         {
-            return store.Remove(member);
+            this.AssertNotReadOnly();
+            return Store.Remove(member);
         }
 
         /// <summary>
@@ -177,12 +188,13 @@ namespace Scriban.Runtime
         /// <param name="readOnly">if set to <c>true</c> the value will be read only.</param>
         public void SetReadOnly(string member, bool readOnly)
         {
+            this.AssertNotReadOnly();
             InternalValue internalValue;
-            if (store.TryGetValue(member, out internalValue))
+            if (Store.TryGetValue(member, out internalValue))
             {
             }
             internalValue.IsReadOnly = readOnly;
-            store[member] = internalValue;
+            Store[member] = internalValue;
         }
 
         /// <summary>
@@ -213,7 +225,7 @@ namespace Scriban.Runtime
 
         public IEnumerator<KeyValuePair<string, object>> GetEnumerator()
         {
-            var list = store.Select(item => new KeyValuePair<string, object>(item.Key, item.Value.Value))
+            var list = Store.Select(item => new KeyValuePair<string, object>(item.Key, item.Value.Value))
                     .ToList();
             return list.GetEnumerator();
         }
