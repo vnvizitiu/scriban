@@ -1,7 +1,78 @@
 # Language
 
-This document describes the syntax of the scriban templating language.
+This document describes the syntax of the scriban language in a templating context (within `{{` and `}}`).
 
+The language rules are the same in a pure scripting context.
+
+> NOTE: This document does not describe the `liquid` language. Check the [`liquid website`](https://shopify.github.io/liquid/) directly.
+
+## Table of Contents
+
+- [Table of Contents](#table-of-contents)
+- [1. Blocks](#1-blocks)
+  - [1.1 Code block](#11-code-block)
+  - [1.2 Text block](#12-text-block)
+  - [1.3 Escape block](#13-escape-block)
+  - [1.4 Whitespace control](#14-whitespace-control)
+  - [1.5 Auto indentation](#15-auto-indentation)
+- [2 Comments](#2-comments)
+- [3 Literals](#3-literals)
+  - [3.1 Strings](#31-strings)
+  - [3.2 Numbers](#32-numbers)
+  - [3.3 Boolean](#33-boolean)
+  - [3.4 null](#34-null)
+- [4 Variables](#4-variables)
+  - [4.1 The special variable `this`](#41-the-special-variable-this)
+  - [4.2 The special variable `empty`](#42-the-special-variable-empty)
+- [5 Objects](#5-objects)
+  - [5.1 The special property `empty?`](#51-the-special-property-empty)
+- [6 Arrays](#6-arrays)
+  - [6.1 Array with properties](#61-array-with-properties)
+  - [6.2 The special `size` property](#62-the-special-size-property)
+- [7 Functions](#7-functions)
+  - [7.1 Simple functions](#71-simple-functions)
+  - [7.2 Anonymous functions](#72-anonymous-functions)
+  - [7.3 Parametric functions](#73-parametric-functions)
+  - [7.4 Inline functions](#74-inline-functions)
+  - [7.5 Function Pointers](#75-function-pointers)
+- [8 Expressions](#8-expressions)
+  - [8.1 Variable path expressions](#81-variable-path-expressions)
+  - [8.2 Assign expression](#82-assign-expression)
+  - [8.3 Nested expression](#83-nested-expression)
+  - [8.4 Arithmetic expressions](#84-arithmetic-expressions)
+    - [On numbers](#on-numbers)
+    - [On strings](#on-strings)
+  - [8.5 Conditional expressions](#85-conditional-expressions)
+  - [8.6 Unary expressions](#86-unary-expressions)
+  - [8.7 Range expressions](#87-range-expressions)
+  - [8.8 The null-coalescing operators `??`, `?!`](#88-the-null-coalescing-operators--)
+  - [8.9 Function call expression](#89-function-call-expression)
+    - [Named arguments](#named-arguments)
+- [9 Statements](#9-statements)
+  - [9.1 Single expression](#91-single-expression)
+  - [9.2 Compound Assignment](#92-compound-assignment)
+  - [9.3 `if <expression>`, `else`, `else if <expression>`](#93-if-expression-else-else-if-expression)
+    - [Truthy and Falsy](#truthy-and-falsy)
+  - [9.4 `case` and `when`](#94-case-and-when)
+  - [9.5 Loops](#95-loops)
+    - [`for <variable> in <expression> ... end`](#for-variable-in-expression--end)
+      - [The `offset` parameter](#the-offset-parameter)
+      - [The `limit` parameter](#the-limit-parameter)
+      - [The `reversed` parameter](#the-reversed-parameter)
+    - [`while <expression> ... end`](#while-expression--end)
+    - [`tablerow <variable> in <expression> ... end`](#tablerow-variable-in-expression--end)
+      - [The `cols` parameter](#the-cols-parameter)
+    - [Special loop variables](#special-loop-variables)
+    - [`break` and `continue`](#break-and-continue)
+  - [9.6 `capture <variable> ... end`](#96-capture-variable--end)
+  - [9.7 `readonly <variable>`](#97-readonly-variable)
+  - [9.8 `import <variable_path>`](#98-import-variable_path)
+  - [9.9 `with <variable> ... end`](#99-with-variable--end)
+  - [9.10 `wrap <function> <arg1...argn> ... end`](#910-wrap-function-arg1argn--end)
+  - [9.11 `include <name> arg1?...argn?`](#911-include-name-arg1argn)
+  - [9.12 `ret <expression>?`](#912-ret-expression)
+
+[:top:](#language)
 ## 1. Blocks
 
 There are 3 types of block of text in a template:
@@ -10,6 +81,7 @@ There are 3 types of block of text in a template:
 - **Text block**: a plain block to output *as is*
 - **Escape block**: a text block that can escape code blocks 
 
+[:top:](#language)
 ### 1.1 Code block
 
 A text enclosed by `{{` and `}}` is a scriban **code block** that will be evaluated by the scriban templating engine.
@@ -20,91 +92,216 @@ A scriban code block may contain:
    `{{ name }}`
 - or a **multiline statements**:
     ```
-     {{
-        if !name
-          name = "default"
-        end
-        name
-     }}
+    {{
+      if !name
+        name = "default"
+      end
+      name
+    }}
     ```
-Inside a code block, except for the EOL after each statement, white spaces characters are not affecting the parsing. There is only one case where whitespace is used to disambiguate between an array indexer and an array initializer.   
+- or **statements separated by a semi-colon `;`** to allow compact forms in some use cases:
+    ```
+    {{if !name; name = "default"; end; name }}
+    ```
 
+In a code block, white space characters have no impact on parsing, with the exception of the end-of-line character following each statement. The only exception is when white space is used to distinguish between an array indexer and an array initializer. 
+
+Additionally, when a statement is an expression (but not an assignment expression), the result of the expression will be displayed in the template's output:
+
+> **input**
+```scriban-html
+{{
+  x = 5     # This assignment will not output anything
+  x         # This expression will print 5
+  x + 1     # This expression will print 6
+}}
+```
+> **output**
+```html
+56
+```
+Note that in the previous example, there is no EOL between `5` and `6` because we are inside a code block. 
+You can still use a plain string with an EOL inside a code block `"\n"` or you could use mixed code and text blocks:
+
+> **input**
+```scriban-html
+{{ x = 5 }}
+{{ x }}
+{{ x + 1 }}
+```
+> **output**
+```html
+5
+6
+```
+
+[:top:](#language)
 ### 1.2 Text block
 
-Otherwise, any text is considered as a **text block** and simply output as is
+Otherwise, any text is treated as a **text block** and is outputted without modification.
 
 ```
-	Hello this is {{ name }}, welcome to scriban!
-    ______________          _____________________
-    ^ text block            ^ text block
+Hello this is {{ name }}, welcome to scriban!
+______________          _____________________
+^ text block            ^ text block
 
 ```
 
+[:top:](#language)
 ### 1.3 Escape block
 
 Any code and text block can be escaped to produce a text block by enclosing it with `{%{` and `}%}` 
 
 For example the following escape:
--  `{%{Hello this is {{ name }}}%}`
-   
+> **input**: `{%{Hello this is {{ name }}}%}`   
 > **output**: `Hello this is {{ name }}` 
 
-Any escape block can be also escaped by increasing the number of `%` in the starting and ending block:
-- `{%%{This is an escaped block: }%} here}%%}`
-   
+If you want to escape an escape block, you can increase the number of % in the starting and ending block:
+> **input**: `{%%{This is an escaped block: }%} here}%%}`
 > **output**: `This is an escaped block: }%} here`
 
-Hence a starting escape block `{%%%%{` will required an ending `}%%%%}`
+This allow effectively to nest escape blocks and still be able to escape them.
 
+This allows for effective nesting of escape blocks and the ability to escape them.
+For example, a starting escape block {%%%%{ will require an ending }%%%%}"
+
+[:top:](#language)
 ### 1.4 Whitespace control
 
-By default, any whitespace (including new lines) before or after a code/escape block are copied to the output. You can omit whitespace just before or after a code/escape block by using the character `~`:
+By default, any whitespace (including new lines) before or after a code/escape block are copied as-is to the output. 
 
-Examples with the variable `name = "foo"`:
+Scriban provides **two modes** for controlling whitespace:
 
-* Strip whitespaces on the left:
+- The **greedy mode** using the character `-` (e.g `{{-` or `-}}`), **removes any whitespace, including newlines** 
+  Examples with the variable `name = "foo"`:
+  
+  * Strip whitespace on the left:  
+    > **input**
+    ```scriban-html
+    This is a <       
+    {{- name}}> text
+    ``` 
+    > **output**
+    ```html
+    This is a <foo> text
+    ```
+    
+  * Strip on the right:  
+    > **input**
+    ```scriban-html
+    This is a <{{ name -}} 
+    > text:       
+    ``` 
+    > **output**
+    ```html
+    This is a <foo> text
+    ```
+  
+  * Strip on both left and right:  
+    > **input**
+    ```scriban-html
+    This is a <
+    {{- name -}} 
+    > text:       
+    ```
+    > **output**
+    ```html
+    This is a <foo> text
+    ```
 
-``` 
-This is a <       
-{{~ name}}> text
-``` 
+- The **non greedy mode** using the character `~`
+  - Using a `{{~` will remove any **preceeding whitespace** until it reaches a **non whitespace character such as a newline or letter**
+  - Using a `~}}` will remove any **following whitespace including the first newline** until it reaches a **non whitespace character or a second newline**
 
-> **output**: `This is a <foo> a text` 
+  This mode is very convenient when you want to use only a scriban statement on a line, but want that line to be completely 
+  removed from the output, but to keep spaces before and after this line intact.
 
-* Strip on the right:
+  In the following example, we want to remove entirely the lines `{{~ for product in products ~}}` and `{{~ end ~}}`, but we want
+  for example to keep the indentation of the opening `<li>`.
 
-``` 
-This is <{{ name ~}} 
-> a text:       
-``` 
+  Using the greedy mode `{{-` or `-}}` would have removed all whitespace and lines and would have put the results on a single line.
 
-> **output**: `This is a <foo> a text` 
+  > **input**
+  ```
+  <ul>
+      {{~ for product in products ~}}
+      <li>{{ product.name }}</li>
+      {{~ end ~}}
+  </ul>
+  ```
 
-* Strip on both left and right:
+  > **output**
+  ```
+  <ul>
+      <li>Orange</li>
+      <li>Banana</li>
+      <li>Apple</li>
+  </ul>
+  ```
 
-``` 
-This is <
-{{~ name ~}} 
-> a text:       
-``` 
+Both mode `~` and '-' can also be used with **escape blocks** `{%%{~` or `~}%%}` or `{%%{-` or `-}%%}`
 
-> **output**: `This is a <foo> a text` 
+[:top:](#language)
+### 1.5 Auto indentation
 
-The `~` character can also be used with **escape blocks** `{%%{~` or `~}%%}`
+By default, when a code enter is without a left strip (e.g `{{-` or `{{~`) and is preceded by only whitespace on the same line, the content of the block will be indented accordingly to the number of whitespace before the code enter. 
 
+> **input**
+```
+{{ a_multi_line_value = "test1\ntest2\ntest3\n" ~}}
+   {{ a_multi_line_value }}Hello
+```
+
+Notice the 3 whitespace characters `   ` before the expression `{{ a_multi_line_value }}`.
+
+> **output**
+```
+   test1
+   test2
+   test3
+Hello   
+```
+
+The output is auto-indented. This feature can be turned off on by setting `TemplateContext.AutoIndent = false`.
+
+Note that if the previous line contains a greedy right strip `-}}`, the indent will be skipped on the next code enter of the next line.
+
+> **input**
+```
+{{ a_multi_line_value = "test1\ntest2\ntest3\n" -}}
+   {{ a_multi_line_value }}Hello
+```
+
+> **output**
+```
+test1
+test2
+test3
+Hello   
+```
+
+[:top:](#language)
 ## 2 Comments
 
 Within a code block, scriban supports single line comments `#` and multi-line comments `##`:
 
 `{{ name   # this is a single line comment }}`
 
-```
+> **input**
+```scriban-html
 {{ ## This 
 is a multi
 line
 comment ## }}
 ```
+> **output**
+```html
 
+```
+
+As you can notice, both single line and multi-line comments can be closed by the presence of a code block exit tag `}}`
+
+[:top:](#language)
 ## 3 Literals
 
 ### 3.1 Strings
@@ -121,37 +318,86 @@ Scriban supports two types of strings:
   - `\b` backspace
   - `\f` form feed
   - `\uxxxx` where xxxx is a unicode hexa code number `0000` to `ffff` 
+  - `\x00-\xFF` a hexadecimal ranging from `0x00` to `0xFF`
+
 - **verbatim strings** enclosed by backstick quotes `` `...` ``. They are, for example, useful to use with for regex patterns :
-  ``` 
+  > **input**
+  ```scriban-html
   {{ "this is a text" | regex.split `\s+` }}
   ``` 
-  
-  will output:
-  
-  ``` 
-  [this, is, a, test]
+  > **output**
+  ```html 
+  [this, is, a, text]
   ``` 
 
+- **Interpolated strings** starting with a `$` enclosed by double quotes `$"..."` or simple quotes `$'...'`.
+  > **input**
+  ```scriban-html
+  {{ $"this is an interpolated string with an expression {1 + 2} and a substring {"Hello"}" }}
+  ``` 
+  > **output**
+  ```html 
+  this is an interpolated string with an expression 3 and a substring Hello
+  ``` 
+  
+[:top:](#language)
 ### 3.2 Numbers
 
 A number in scriban `{{ 100 }}` is similar to a javascript number: 
 
 - Integers: `100`, `1e3`
-- Floats: `100.0`, `1.0e3`, `1.0e-3` 
+  - Hexadecimal integers: `0x1ef` and unsigned `0x80000000u`
+- Floats: `100.0`, `1.0e3`, `1.0e-3`
+  - 32-bit floats: `100.0f`
+  - 64-bit floats: `100.0d`
+  - 128-bit decimals: `100.0m` 
 
+[:top:](#language)
 ### 3.3 Boolean
 
 The boolean value `{{ true }}` or `{{ false }}`
 
+> **input**
+```scriban-html
+{{ true }}
+{{ false }}
+```
+> **output**
+```scriban-html
+true
+false
+```
+
+[:top:](#language)
 ### 3.4 null
 
 The null value `{{ null }}` 
 
+When resolving to a string output, the null value will output an empty string:
+
+> **input**
+```scriban-html
+{{ null }}
+```
+> **output**
+```html
+
+```
+
+[:top:](#language)
 ## 4 Variables
 
 Scriban supports the concept of **global** and **local** variables
 
-A **global/property variable** like `{{ name }}` is a javascript like identifier, starting by a letter and following by a letter `A-Z a-z`, a digit `0-9` or an underscore `_`
+A **global/property variable** like `{{ name }}` is a liquid like handle, starting by a letter or underscore `_` and following by a letter `A-Z a-z`, a digit `0-9`, an underscore `_`
+
+The following text are valid variable names:
+
+- `var` 
+- `var9`
+- `_var`
+
+> NOTE: In liquid, the character `-` is allowed in a variable name, but when translating it to a scriban, you will have to enclose it into a quoted string
 
 A **local variable** like `{{ $name }}` is an identifier starting with `$`. A local variable is only accessible within the same include page or function body.
 
@@ -159,11 +405,69 @@ The **special local variable** `$` alone is an array containing the arguments pa
 
 The special local variables `$0` `$1` ... `$n` is a shorthand of `$[0]`, `$[1]` ... `$[n]`. e.g Using `$0` returns the first argument of the current function or including page.
 
+### 4.1 The special variable `this`
+
+The `this` variable gives you access to the current object bound where you have access to all local variables for the current scope.
+
+Thus the following variable access are equivalent:
+
+> **input**
+```scriban-html
+{{
+a = 5
+a    # output 5
+this.a = 6
+a    # output 6
+this["a"] = 7
+a    # output 7
+}}
+```
+> **output**
+```html
+567
+```
+In the case of the `with` statement, the this operator refers to the object passed to `with`:
+
+> **input**
+```scriban-html
+{{
+a = {x: 1, y: 2}
+with a
+    b = this
+end
+b.x
+}}
+```
+> **output**
+```html
+1
+```
+
+[:top:](#language)
+### 4.2 The special variable `empty`
+
+The empty variable represents an empty object and is primarily used for compatibility with Liquid templates. It provides a way to compare an object with the empty variable to determine if it is empty or not:
+
+> **input**
+```scriban-html
+{{
+a = {}
+b = [1, 2]~}}
+{{a == empty}}
+{{b == empty}}
+```
+> **output**
+```html
+true
+false
+```
+
+[:top:](#language)
 ## 5 Objects
 
 Scriban supports javascript like objects `{...}`
 
-An object can be initialized empty :
+An object can be initialized empty:
 
 `{{ myobject = {} }}` 
 
@@ -186,22 +490,57 @@ An object can be initialized with some members over multiple lines:
 }}
 ```
 
-Members of an object can be accessed:
+Members of an object can be accessed using dot notation or square bracket notation:
 
 `{{ myobject.member1 }}` also equivalent to `{{ myobject["member1"] }}`
 
+
+You can access optional members in chain via the optional member operator `?.` (instead of the regular member operator: `.` ) (**New in 3.0**)
+
+`{{ myobject.member1?.submember1?.submember2 ?? "nothing" }}` will return `"nothing"` as `member1` doesn't contain a `submember1`/`submember2`.
+
 If the object is a "pure" scriban objects (created with a `{...}` or  instantiated by the runtime as a `ScriptObject`), you can also add members to it with a simple assignment:
 
-```
+> **input**
+```scriban-html
 {{
   myobject = {} 
   myobject.member3 = "may be" 
+  myobject.member3
 }}
 ``` 
+> **output**
+```html
+may be
+``` 
 
+> **NOTICE**
+>
+> By default, Properties and methods of .NET objects are automatically exposed with lowercase and `_` names. It means that a property like `MyMethodIsNice` will be exposed as `my_method_is_nice`. This is the default convention, originally to match the behavior of liquid templates.
+> If you want to change this behavior, you need to use a [`MemberRenamer`](runtime.md#member-renamer) delegate
+
+### 5.1 The special property `empty?`
+
+Any object can respond the the property `.empty?` to check if it is empty or not:
+
+> **input**
+```scriban-html
+{{
+a = {}
+b = [1, 2]~}}
+{{a.empty?}}
+{{b.empty?}}
+```
+> **output**
+```html
+true
+false
+```
+
+[:top:](#language)
 ## 6 Arrays
 
-An array can be initialized empty :
+An array can be initialized empty:
 
 `{{ myarray = [] }}` 
 
@@ -256,34 +595,218 @@ You can also manipulate arrays with the [`array` builtin object](#array-builtin)
 > }}    
 > ```
 
+### 6.1 Array with properties
 
+An array can also contains attached properties:
+
+> **input**
+```scriban-html
+{{
+a = [5, 6, 7]
+a.x = "yes"
+a.x + a[0]
+}}
+```
+> **output**
+```html
+yes5
+```
+
+[:top:](#language)
+### 6.2 The special `size` property
+
+Arrays have a `size` property that can be used to query the number of elements in the array:
+
+> **input**
+```scriban-html
+{{
+a = [1, 2, 3]
+a.size
+}}
+```
+> **output**
+```html
+3
+```
+
+[:top:](#language)
 ## 7 Functions
 
-Scriban allows to define functions:
+Scriban allows for the definition of four different types of functions:
 
-The following declares a function `inc` that uses its first argument to return an increment of the value.
+- Simple functions
+- Anonymous functions
+- Parametric functions (**New in 3.0**)
+- Inline functions (**New in 3.0**)
+
+### 7.1 Simple functions
+
+The following declares a function `sub` that takes two arguments, `a` and `b`, and subtracts the value of `b` from `a`:
 
 ``` 
-{{func inc
-   ret $0 + 1
+{{func sub
+   ret $0 - $1
 end}}
 ``` 
 
+All argument are passed to the special variable `$` that will contain the list of direct arguments
+and named arguments:
+
+- `$0` or `$[0]` will access the first argument
+- `$1` or `$[1]` will access the second argument
+- `$[-1]` will access the last argument
+- `$.named` will access the named argument `named` 
+
 This function can then be used:
 
+> **input**
 ```
-{{inc 1}}
-{{5 | inc}}
+{{sub 5 1}}
+{{5 | sub 1}}
+```
+> **output**
+```
+4
+4
 ```
 
-will output:
+As you can notice from the example above, when using the pipe, the result of the pipe is pushed as the **first argument** of the pipe receiver.
 
+Note that a function can have mixed text statements as well:
+
+``` 
+{{func inc}}
+   This is a text with the following argument {{ $0 + 1 }}
+{{end}}
+```
+
+> NOTE: Setting a non-local variable (e.g `a = 10`) in a simple function will be set at the global level and not at the function level.
+>
+> Parametric functions are solving this behavior by introducing a new variable scope inside the function that includes parameters. 
+ 
+### 7.2 Anonymous functions
+
+Anonymous functions are like simple functions but can be used in expressions (e.g as the last argument of function call)
+
+
+> **input**
+```
+{{ sub = do; ret $0 - $1; end; 1 | sub 3 }}
+```
+> **output**
+```
+-2
+```
+
+They are very convenient to build custom block functions:
+
+> **input**
+```
+{{ func launch; ret $0 1 2; end
+launch do 
+    ret $0 + $1
+end
+}}
+```
+> **output**
+```
+3
+``` 
+ 
+### 7.3 Parametric functions
+
+They are similar to simple functions but they are declared with parenthesis, while also supporting declaration of different kind of parameters (normal, optional, variable).
+
+Another difference with simple functions is that they require function calls and arguments to match the expected function parameters. 
+
+- A function with normal parameters:
+
+``` 
+{{func sub(x,y)
+   ret x - y
+end}}
+``` 
+
+> **input**
+```
+{{sub 5 1}}
+{{5 | sub 1}}
+```
+> **output**
+```
+4
+4
+```
+
+
+- A function with normal parameters and optional parameters with default values:
+
+``` 
+{{func sub_opt(x, y, z = 1, w = 2)
+   ret x - y - z - w
+end}}
+``` 
+
+> **input**
+```
+{{sub_opt 5 1}}
+{{5 | sub_opt 1}}
+```
+> **output**
+```
+1
+1
+```
+
+Here we override the value of `z` and set it to `0` instead of default `1`:
+
+> **input**
+```
+{{sub_opt 5 1 0 }}
+{{5 | sub_opt 1 0}}
+```
+> **output**
 ```
 2
-6
+2
 ```
 
-Because functions are object, they can be stored into a property of an object:
+- A function with normal parameters and optional parameters with default values:
+
+``` 
+{{func sub_variable(x, y...)
+   ret x - (y[0] ?? 0) - (y[1] ?? 0)
+end}}
+``` 
+
+> **input**
+```
+{{sub_variable 5 1 -1}
+{{5 | sub_variable 1 -1}}
+```
+> **output**
+```
+5
+5
+```
+
+> NOTE: The special variable `$` is still accessible in parametric functions and represent the direct list of arguments. In the example above, `$ =  [5, [1, -1]]` 
+ 
+### 7.4 Inline functions
+
+For simple functions, it is convenient to define simple functions like mathematical functions:
+
+```
+{{ sub(x,y) = x - y }}
+```
+
+Inline functions are similar to parametric functions but they only support normal parameters. They don't support optional or variable parameters.
+
+
+
+### 7.5 Function Pointers
+
+Because functions are object, they can be stored into a property of an object by using the alias `@` operator:
 
 ```
 {{
@@ -296,20 +819,23 @@ x = 1 | myobject.myinc # x = x + 1
 
 The function aliasing operator `@` allows to pass a function as a parameter to another function, enabling powerful function compositions.
 
+[:top:](#language)
 ## 8 Expressions
 
 Scriban supports conventional unary and binary expressions.
 
+[:top:](#language)
 ### 8.1 Variable path expressions
 
 A variable path expression contains the path to a variable:
 
 * A simple variable access: `{{ name }}` e.g resolve to the top level variable `name`
-* An array access: `{{ myarray[1] }}` e.g resolve to the top level variable `name`
+* An array access: `{{ myarray[1] }}` e.g resolve to the top level variable `myarray` and an indexer to the array
 * A member access: `{{ myobject.member1.myarray[2] }}` e.g resolve to the top level variable `myobject`, then the property `member1` this object, the property `myarray` and an indexer to the array returned by `myarray`
 
 Note that a variable path can either point to a simple variable or can result into calling a parameter less function. 
 
+[:top:](#language)
 ### 8.2 Assign expression
 
 A value can be assigned to a top level variable or to the member of an object/array:
@@ -320,6 +846,7 @@ A value can be assigned to a top level variable or to the member of an object/ar
 
 An assign expression must be a top level expression statement and cannot be used within a sub-expression.
 
+[:top:](#language)
 ### 8.3 Nested expression
 
 An expression enclosed by `(` and `)` 
@@ -327,6 +854,7 @@ An expression enclosed by `(` and `)`
 `{{ name = ('foo' + 'bar') }}`
 
 
+[:top:](#language)
 ### 8.4 Arithmetic expressions
 
 #### On numbers
@@ -336,7 +864,7 @@ The following binary operators are supported for **numbers**:
 |Operator            | Description
 |--------------------|------------
 | `<left> + <right>` | add left to right number 
-| `<left> - <right>` | substract right number from left
+| `<left> - <right>` | subtract right number from left
 | `<left> * <right>` | multiply left by right number
 | `<left> / <right>` | divide left by right number
 | `<left> // <right>`| divide left by right number and round to an integer
@@ -344,6 +872,7 @@ The following binary operators are supported for **numbers**:
 
 If left or right is a float and the other is an integer, the result of the operation will be a float.
 
+[:top:](#language)
 #### On strings
 
 The following binary operators are supported for **strings**: 
@@ -363,9 +892,10 @@ The following literals are converted to plain strings:
 * `true -> "true"`
 * `false -> "false"`
 
+[:top:](#language)
 ### 8.5 Conditional expressions
 
-A conditional expression produces a boolean by comparing a left and right value.
+A boolean expression produces a boolean by comparing a left and right value.
 
 |Operator            | Description
 |--------------------|------------
@@ -376,8 +906,19 @@ A conditional expression produces a boolean by comparing a left and right value.
 | `<left> < <right>`  | Is left less than right?
 | `<left> <= <right>` | Is left less or equal to right?
 
-They work with both `numbers` and `strings`.
+They work with both `numbers`, `strings` and datetimes.
 
+You can combine conditional expressions with `&&` (and operator) and `||` (or operator).
+Unlike in `javascript` it always returns `boolean` and never `<left>` or `<right>`.
+
+|Operator            | Description
+|--------------------|------------
+| `<left> && <right>` | Is left true and right true?
+| `<left> \|\| <right>` | Is left true or right true?
+
+The conditional expression `cond ? left : right` allow to return `left` if `cond` is `true` otherwise `right`. (**New in 3.0**)
+
+[:top:](#language)
 ### 8.6 Unary expressions
 
 |Operator             | Description
@@ -387,7 +928,14 @@ They work with both `numbers` and `strings`.
 | `- <expression>`    | Arithmetic negate an expression  
 | `^ <expression>`    | Expand an array passed to arguments of a function call (see function call)
 | `@ <expression>`    | Alias the result of an expression that would be evaluated if it was a function call
+| `++ <variable>`     | Increments the variable.  Expression is evaluated to the value *after* it is incremented.
+| `-- <variable>`     | Decrements the variable.  Expression is evaluated to the value *after* it is decremented.
+| `<variable> ++`     | Increments the variable.  Expression is evaluated to the value *before* it is incremented.
+| `<variable> --`     | Decrements the variable.  Expression is evaluated to the value *before* it is decremented.
 
+> *Note:* For the increment an decrement operators, the operand must be a variable, property or indexer
+
+[:top:](#language)
 ### 8.7 Range expressions
 
 They are special binary expressions that provides an iterator (used usually with the `for` statement)
@@ -399,7 +947,14 @@ The evaluated `left` and `right` expressions must resolve to an integer at runti
 | `left..right`   | Returns an iterator between `left` and `right` with a step of 1, including `right`. e.g: `1..5` iterates from 1 to 5
 | `left..<right`  | Returns an iterator between `left` and `right` with a step of 1, excluding `right`. e.g: `1..<5` iterates from 1 to 4
 
-### 8.8 Function call expression
+### 8.8 The null-coalescing operators `??`, `?!` 
+
+The operator `left ?? right` can be used to return the `right` value if `left` is null.
+
+The operator `left ?! right` can be used to return the `right` value if `left` is not null.
+
+[:top:](#language)
+### 8.9 Function call expression
 
 A function can be called by passing parameters separated by a whitespace:
 
@@ -409,10 +964,77 @@ The pipe operator `|` can also be used to pipe the result of an expression to a 
 
 `{{ date.parse '2016/01/05' | date.to_string '%g' }}` will output `06 Jan 2016`
 
+> Notice that when a function receives the result of a pipe call (e.g `date.to_string` in the example above), it is passed as the **first argument of the call**. This is valid for both .NET custom functions as well as for Scriban integrated functions.
+
+Pipes are *greedy* with respect to whitespace.  This allow them to be chained across multiple lines:  
+
+```
+{{-
+"text"                        |
+      string.append "END"     |
+      string.prepend "START"
+-}}
+```
+      
+will output `STARTtextEND`
+
+#### Named arguments
+
+When passing multiple arguments to an existing .NET function, you may want to use named arguments.
+
+Suppose you have declared a .NET function like this:
+
+```c#
+public static string MyProcessor(string left, string right, int count, string options = null)
+{
+    // ...
+}
+```
+
+You can call this function from scriban with the following syntax:
+
+```scriban-html
+{{ my_processor "Hello" "World" count: 15 options: "optimized" }}
+```
+
+with a pipe we could rewrite this to:
+
+```scriban-html
+{{ "Hello" | my_processor "World" count: 15 options: "optimized" }}
+```
+> Note that once arguments are named, the following arguments must be all named.
+
+In a custom function declared with `func` named arguments are accessible through the variable arguments variable `$`, but as properties (and not as part of the default array arguments):
+
+> **input**
+```scriban-html
+{{
+    func my_processor
+        "Argument count:" + $.count
+        "Argument options:" + $["options"]
+        for $x in $
+            "arg[" + $x + "]: " + $x
+        end
+    end
+
+    my_processor "Hello" "World" count: 15 options: "optimized"
+}}
+```
+
+> **output**
+```html
+Argument count: 15
+Argument options: optimized
+arg[0]: Hello
+arg[1]: World
+```
+
+[:top:](#language)
 ## 9 Statements
 
-Each statement must be terminated by a code block `}}` or an EOL within a code block.
+Each statement must be terminated by a code block `}}` or an EOL within a code block, or a semicolon to separate multiple statements on a single line within a code block.
 
+[:top:](#language)
 ### 9.1 Single expression
 
 An expression statement:
@@ -425,7 +1047,26 @@ value + 1       # This is a single line expression statement followed by this co
 }}
 ```
 
-### 9.2 `if <expression>`, `else`, `else if <expression>`
+[:top:](#language)
+### 9.2 Compound Assignment
+
+The following compound assignment operators are supported for **numbers**:
+
+|Operator             | Description
+|---------------------|------------
+| `<left> += <right>` | add left to right number, and assigns the result to left
+| `<left> -= <right>` | subtract right number from left, and assigns the result to left
+| `<left> *= <right>` | multiply left by right number, and assigns the result to left
+| `<left> /= <right>` | divide left by right number, and assigns the result to left
+| `<left> //= <right>`| divide left by right number and round to an integer, and assigns the result to left
+| `<left> %= <right>` | calculates the modulus of left by right, and assigns the result to left
+
+If left or right is a float and the other is an integer, the result of the operation will be a float.
+
+> *Note:* The left-hand side of the assignment statement must be a variable, property or indexer
+
+[:top:](#language)
+### 9.3 `if <expression>`, `else`, `else if <expression>`
 
 The general syntax is:
 
@@ -445,20 +1086,57 @@ An `if` statement must be closed by an `end` or followed by a `else` or `else if
 
 An expression evaluated for a `if` or `else if` will be converted to a boolean.
 
+#### Truthy and Falsy
+
+By default, only the `null` and boolean `false` are considered as `false` when evaluated as booleans.
+
 The following values are used for converting literals to boolean:
 
-- `0 -> false`
+- `0 -> true`
 - `1 -> true` or any non zero value
-- `null -> false`
+- **`null -> false`**
+- **`false -> false`**
 - `non_null_object -> true`
-- `"" -> false` An empty string returns false
+- `"" -> true` An empty string returns **true**
 - `"foo" -> true` 
 
 Example testing a page object:
  
-`{{ if !page }}Page is not null{{ else }}Page is null!{{ end }}` 
+`{{ if page }}Page is not null{{ else }}Page is null!{{ end }}` 
 
-### 9.3 Loops
+
+[:top:](#language)
+### 9.4 `case` and `when`
+
+This is the equivalent of `switch` statement in C#, a selection statement that chooses a single switch section to execute from a list of candidates based on a value matching. 
+
+- `case <expression>` opens a switch with an expression
+- `when <match>` allows to match with the specified expression and the case expression
+  - `when` can also be used with multiple values separated by `,` or `||`
+- A final `else` can be used to as a default handler in case nothing matched.
+
+> **input**
+```scriban-html
+{{
+    x = 5
+    case x
+      when 1, 2, 3
+          "Value is 1 or 2 or 3"
+      when 5
+          "Value is 5"
+      else
+          "Value is " + x
+    end
+}}
+```
+
+> **output**
+```html
+Value is 5
+```
+
+[:top:](#language)
+### 9.5 Loops
 
 #### `for <variable> in <expression> ... end`
 
@@ -474,6 +1152,60 @@ The expression can be an array or a range iterator:
 
 * Loop on a range: `{{ for x in 1..n }}This is the loop step [{{x}}]{{ end }}`  
 
+The for loop (along with the `tablerow` statement below) supports additional parameters, `offset`, `limit` and `reversed` that can also be used togethers:
+
+##### The `offset` parameter
+
+Allows to start the iteration of the loop at the specified zero-based index:
+
+> **input**
+```scriban-html
+{{~ for $i in (4..9) offset:2 ~}}
+ {{ $i }}
+{{~ end ~}}
+```
+> **output**
+```html
+6
+7
+8
+9
+```
+
+##### The `limit` parameter
+
+Limits the iteration of the loop to a specified count:
+
+> **input**
+```scriban-html
+{{~ for $i in (4..9) limit:2 ~}}
+ {{ $i }}
+{{~ end ~}}
+```
+> **output**
+```html
+4
+5
+```
+
+##### The `reversed` parameter
+
+Reverses the iteration of the elements:
+
+> **input**
+```scriban-html
+{{~ for $i in (1..3) reversed ~}}
+ {{ $i }}
+{{~ end ~}}
+```
+> **output**
+```html
+3
+2
+1
+```
+
+[:top:](#language)
 #### `while <expression> ... end`
 
 ```
@@ -484,6 +1216,60 @@ The expression can be an array or a range iterator:
 
 Like the `if` statement, the `expression` is evaluated to a boolean.
 
+#### `tablerow <variable> in <expression> ... end`
+
+This function generates HTML rows compatible with an HTML table. Must be wrapped in an opening `<table>` and closing `</table>` HTML tags.
+
+This statement is mainly for compatibility reason with the liquid `tablerow` tag.
+It uses similar syntax to a `for` statement (supporting the same parameters).
+
+```
+{{tablerow <variable> in <expression>}} 
+  ... 
+{{end}}
+```
+> **input**
+```scriban-html
+<table>
+  {{~ tablerow $p in products | array.sort "title" -}}
+    {{ $p.title -}}
+  {{ end ~}}
+</table>
+```
+> **output**
+```html
+<table>
+<tr class="row1"><td class="col1">Apple</td></tr>
+<tr class="row2"><td class="col1">Banana</td></tr>
+<tr class="row3"><td class="col1">Computer</td></tr>
+<tr class="row4"><td class="col1">Mobile Phone</td></tr>
+<tr class="row5"><td class="col1">Orange</td></tr>
+<tr class="row6"><td class="col1">Sofa</td></tr>
+<tr class="row7"><td class="col1">Table</td></tr>
+</table>
+```
+
+##### The `cols` parameter
+
+Defines the number of columns to output:
+
+> **input**
+```scriban-html
+<table>
+  {{~ tablerow $p in (products | array.sort "title") limit: 4 cols: 2 -}}
+    {{ $p.title -}}
+  {{ end ~}}
+</table>
+```
+> **output**
+```html
+<table>
+<tr class="row1"><td class="col1">Apple</td><td class="col2">Banana</td></tr>
+<tr class="row2"><td class="col1">Computer</td><td class="col2">Mobile Phone</td></tr>
+</table>
+```
+
+[:top:](#language)
 #### Special loop variables
 
 The following variables are accessible within a `for` block:
@@ -491,10 +1277,12 @@ The following variables are accessible within a `for` block:
 | Name                | Description
 | ------------------- | -----------
 | `{{for.index}}`     | The current `index` of the for loop
+| `{{for.rindex}}`    | The current `index` of the for loop starting from the end of the list
 | `{{for.first}}`     | A boolean indicating whether this is the first step in the loop
 | `{{for.last}}`      | A boolean indicating whether this is the last step in the loop
 | `{{for.even}}`      | A boolean indicating whether this is an even row in the loop
 | `{{for.odd}}`       | A boolean indicating whether this is an odd row in the loop
+| `{{for.changed}}`   | A boolean indicating whether a current value of this iteration changed from previous step
 
 Within a `while` statement, the following variables can be used:
 
@@ -505,6 +1293,7 @@ Within a `while` statement, the following variables can be used:
 | `{{while.even}}`      | A boolean indicating whether this is an even row in the loop
 | `{{while.odd}}`       | A boolean indicating whether this is an odd row in the loop
 
+[:top:](#language)
 #### `break` and `continue`
 
 The `break` statement allows to early exit a loop
@@ -538,7 +1327,8 @@ Will output:
 [5] step
 ```
 
-### 9.4 `capture <variable> ... end`
+[:top:](#language)
+### 9.6 `capture <variable> ... end`
 
 The `capture <variable> ... end` statement allows to capture the template output to a variable:
 
@@ -552,7 +1342,8 @@ This is the result of a capture {{ date.now }}
 
 will set `myvariable = "This is the result of a capture 06 Jan 2016\n"` 
 
-### 9.5 `readonly <variable>`
+[:top:](#language)
+### 9.7 `readonly <variable>`
 
 The `readonly` statement prevents a variable for subsequent assignments:
 
@@ -562,7 +1353,8 @@ The `readonly` statement prevents a variable for subsequent assignments:
 {{ x = 2 }} <- this will result in a runtime error 
 ```
 
-### 9.6 `import <variable_path>`
+[:top:](#language)
+### 9.8 `import <variable_path>`
 
 The `import <variable_path>` statement allows to import the members of an object as variables of the current bound: 
 
@@ -576,7 +1368,8 @@ The `import <variable_path>` statement allows to import the members of an object
 
 Note that `readonly` variables won't be override. 
 
-### 9.7 `with <variable> ... end`
+[:top:](#language)
+### 9.9 `with <variable> ... end`
 
 The `with <variable> ... end` statement will open a new object context with the passed variable, all assignment will result in setting the members of the passed object. 
 
@@ -587,7 +1380,8 @@ with myobject
 end
 ```
 
-### 9.8 `wrap <function> <arg1...argn> ... end`
+[:top:](#language)
+### 9.10 `wrap <function> <arg1...argn> ... end`
 
 Pass a block of statements to a function that will be able to evaluate it using the special variable `$$`
 
@@ -617,9 +1411,10 @@ will output:
 
 Note that variables declared outside the `with` block are accessible within.
 
-### 9.9 `include <name> arg1?...argn?` 
+[:top:](#language)
+### 9.11 `include <name> arg1?...argn?` 
 
-The include is not a statement but actually a function that allows to parse and render the specified template name. In order to use this function, a delegate to an template loader must be setup on the `TemplateOptions.TemplateLoader` property passed to the `Template.Parse` method.
+`include` is not a statement but rather a function that allows you to parse and render a specified template. To use this function, a delegate to a template loader must be setup on the [`TemplateOptions.TemplateLoader`](runtime.md#include-and-itemplateloader) property passed to the `Template.Parse` method.
  
 ```
 include 'myinclude.html'
@@ -640,13 +1435,14 @@ This is a string with the value 1
 This is a string with the value 2 modified
 ```  
 
-### 9.10 `ret <expression>?`
+[:top:](#language)
+### 9.12 `ret <expression>?`
 
 The return statement is used to early exit from a top-level/include page or a function.
 
 ```
 This is a text
-{{~  ret ~}}
+{{~ ret ~}}
 This text will not appear
 ```
 
@@ -656,781 +1452,4 @@ will output:
 This is a text
 ```
 
-## 10 Built-in functions
-
-Scriban provides default built-in functions. 
-
-### 10.1 Array functions
-
-For all array functions, the last argument is expected to be an array or a range iterator. When used with the pipe operator, it is a convenient way to pass the argument to the array funtions.
-
-#### `array.first`
-
-Returns the first element of an array or a range iterator.
-
-```
-{{ [5,6,7,8] | array.first }} 
-{{ 5..8 | array.first }} 
-```
-
-Will output:
-
-```
-5
-5
-```
-
-#### `array.last`
-
-Returns the last element of an array or a range iterator.
-
-```
-{{ [5,6,7,8] | array.last }} 
-{{ 5..8 | array.last }} 
-```
-
-Will output:
-
-```
-8
-8
-```
-
-#### `array.join <delimiter>`
-
-Concatenates elements of an array or a range iterator separated by a delimter string:
-
-```
-{{ [5,6,7,8] | array.join ' , ' }} 
-{{ 5..8 | array.join ' , ' }} 
-```
-
-Will output:
-
-```
-5 , 6 , 7 , 8
-5 , 6 , 7 , 8
-```
-
-#### `array.size`
-
-Returns the number of elements in the array or range iterator.
-
-```
-{{ [5,6,7,8] | array.size }} 
-{{ 5..8 | array.size }} 
-```
-
-Will output:
-
-```
-4
-4
-```
-
-#### `array.uniq`
-
-Filters an array or range iterator by keeping only unique values, returning an iterator.
-
-```
-{{ [1,1,2,3,3] | array.uniq }} 
-```
-
-Will output:
-
-```
-123
-```
-
-#### `array.sort`
-
-Sorts an array or range iterator by its natural ascending order, returning an iterator.
-
-```
-{{ [5,1,4,2,3] | array.sort }} 
-```
-
-Will output:
-
-```
-12345
-```
-
-#### `array.map <member>`
-
-For each object in the input array, extract the specified member and return a new list with the member value, returning an iterator.
-
-```
-{{ array | array.map `key` | array.sort | array.join '\n'}}  
-```
-
-will output the sorted members of the array object: 
-
-```
-add
-add_range
-first
-insert_at
-join
-last
-map
-remove_at
-reverse
-size
-sort
-uniq
-```
-
-#### `array.add <expression>` 
-
-Adds the specified value to the input array. Returns the array to allow further piping.
-
-``` 
-[1,2,3,4] | array.add 5
-```
-
-will output:
-
-```
-12345
-```
-
-#### `array.add_range <iterator>` 
-
-Adds the specified range of values from an array or a range iterator to the input array. Returns the array to allow further piping.
-
-``` 
-[1,2,3,4] | array.add_range [5,6,7,8]
-```
-
-will output:
-
-```
-12345678
-```
-
-#### `array.add_range <iterator>` 
-
-Adds the specified range of values from an array or a range iterator to the input array. Returns the array to allow further piping.
-
-``` 
-[1,2,3,4] | array.add_range ([5,6,7,8])
-```
-
-will output:
-
-```
-12345678
-```
-
-#### `array.remove_at <index>` 
-
-Removes at the specified `index` an object from the input the array. Returns the array to allow further piping.
-
-``` 
-[1,2,3,4] | array.remove_at 0
-```
-
-will output:
-
-```
-234
-```
-
-#### `array.insert_at <index> <expression>` 
-
-Inserts a value at the specified index of the input array. Returns the array to allow further piping.
-
-``` 
-[1,2,3,4] | array.insert_at 1 9
-```
-
-will output:
-
-```
-19234
-```
-
-#### `array.reverse` 
-
-Reverse the order of the elements in the input iterator. Returns an iterator (and not an array)
-
-``` 
-[1,2,3,4] | array.reverse
-```
-
-will output:
-
-```
-4321
-```
-
-### 10.2 Math functions
-
-#### `math.ceil`
-
-Returns the smallest integer greater than or equal to the specified number.
-
-```
-{{ 4.6 | math.ceil }} 
-{{ 4.3 | math.ceil }} 
-```
-
-Will output:
-
-```
-5
-5
-```
-
-#### `math.floor`
-
-Returns the largest integer less than or equal to the specified number.
-
-```
-{{ 4.6 | math.ceil }} 
-{{ 4.3 | math.ceil }} 
-```
-
-Will output:
-
-```
-4
-4
-```
-
-#### `math.floor <decimals>?`
-
-Rounds a value to the nearest integer or to the specified number of fractional digits.
-```
-{{ 4.6 | math.round }}
-{{ 4.3 | math.round }}
-{{ 4.5612 | math.round 2 }}
-```
-
-Will output:
-
-```
-5
-4
-4.56
-```
-
-### 10.3 String functions
-
-#### `string.capitalize`
-
-Converts the first character of the passed string to a upper case character.
-
-```
-{{ "test" | string.capitalize }}
-```
-
-Will output:
-
-```
-Test
-```
-
-#### `string.downcase` and `string.upcase`
-
-Converts the string to lower case (`downcase`) or uppercase (`upcase`)
-
-```
-{{ "TeSt" | string.downcase }}
-{{ "test" | string.upcase }}
-```
-
-Will output:
-
-```
-test
-TEST
-```
-
-#### `string.handleize`
-
-Converts a string to a handle by keeping only alpha and digit and replacing other sequence of characters by `-`.
-
-```
-{{ "This & is a @@^^&%%%%% value" | string.handleize }}
-```
-
-Will output:
-
-```
-This-is-a-value
-```
-
-#### `string.pluralize <single> <plural>`
-
-Returns the first or second arguments depending whether the input number is == 1 or > 1.
-
-```
-{{ 5 | string.pluralize 'item' 'items' }}
-```
-
-Will output:
-
-```
-items
-```
-
-#### `string.remove <match>`
-
-Removes all occurrence of the `<match>` string from the input.
-
-```
-{{ "This is a test with a test" | string.remove 'test' }}
-```
-
-Will output:
-
-```
-This is a  with a 
-```
-
-#### `string.remove_first <match>`
-
-Removes the first occurrence of the `<match>` string from the input.
-
-```
-{{ "This is a test with a test" | string.remove_first 'test' }}
-```
-
-Will output:
-
-```
-This is a  with a test 
-```
-
-#### `string.replace <match> <replace>`
-
-Replaces all occurrence of the `<match>` string by the `<replace>` string from the input.
-
-```
-{{ "This is a test with a test" | string.replace 'test' 'boom'}}
-```
-
-Will output:
-
-```
-This is a boom with a boom 
-```
-
-#### `string.replace_first <match> <replace>`
-
-Replaces the first occurrence of the `<match>` string by the `<replace>` string from the input.
-
-```
-{{ "This is a test with a test" | string.replace_first 'test' 'boom'}}
-```
-
-Will output:
-
-```
-This is a boom with a test 
-```
-
-#### `string.strip`, `string.rstrip`, `string,lstrip`
-
-Removes any whitespace characters on both side (`strip`), right side only (`rstrip`) or left side only (`lstrip`)
-
-```
-{{ "    test     " | string.strip }}
-{{ "test     " | string.rstrip }}
-{{ "     test" | string.lstrip }}
-```
-
-Will output:
-
-```
-test
-test
-test
-```
-
-#### `string.slice <index> <length>?`
-
-Extract a sub-string starting at the specified `index` and optional `length` from the input string. A negative number for the `index` will start backward from the end of the string.
-
-```
-{{ "test" | string.slice 1 }}
-{{ "test" | string.slice (-2) }}
-```
-
-Will output:
-
-```
-est
-st 
-```
-
-#### `string.split <delimiter>`
-
-Splits to an array of string the input string with the matching delimiter and removes empty entries.
-
-```
-{{ "a/b/c/d/e//f" | string.split '/' | array.join ' | ' }}
-```
-
-Will output:
-
-```
-a | b | c | d | e | f
-```
-
-#### `string.starts_with <match>`
-
-Returns a boolean indicating whether the input string starts with the specified `match` string.
-
-```
-{{ "test" | string.starts_with 'test'}}
-{{ "test" | string.starts_with 'toto'}}
-```
-
-Will output:
-
-```
-true
-false
-```
-
-#### `string.strip_newlines`
-
-Strips all newlines from the input string.
-
-```
-{{ "test\r\ntest\r\n" | string.strip_newlines }}
-```
-
-Will output:
-
-```
-testtest
-```
-
-#### `string.truncate <length>`
-
-Truncates the input string up to maximum `length` size, including the trailing `...` that would be added to the string in case of truncation. 
-
-```
-{{ "This is a long test with several chars" | string.truncate 15 }}
-```
-
-Will output:
-
-```
-This is a lo...
-```
-
-#### `string.truncatewords <count>`
-
-Truncates the input string up to maximum `count` words. 
-
-```
-{{ "This is a test truncated at 5" | string.truncatewords 5 }}
-```
-
-Will output:
-
-```
-This is a test truncated...
-```
-
-### 10.4 Regex
-
-
-#### `regex.replace <pattern> <replacement> <input>`
-
-Allows to replace a string by matching with a regex pattern. The replacement string can use replacement groups `\1` if the pattern was using groups.
-
-``` 
-{{ "this is a teeeeeeeeeeext" | regex.replace "te+xt" "text" }}
-``` 
-
-Will output:
-
-``` 
-this is a text
-``` 
-
-#### `regex.split <pattern> <input>`
-
-Split an input string using a regex pattern.
-
-``` 
-{{ "this   is  \t   a  \t   text" | regex.split `\s+` }}
-``` 
-
-Will output:
-
-``` 
-[this, is, a, text]
-``` 
-
-#### `regex.match <pattern> <input>`
-
-Matches a string against a regex pattern and returns an array of strings matched. The first element in the array is the full string being matched and above the groups matched.
-
-```
-{{ "this is a text123" | regex.match `(\w+) a ([a-z]+\d+)` }}
-```
-
-Will output:
-
-``` 
-[is a text123, is, text123]
-``` 
-
-If no match are found, an empty array `[]` is returned.
-
-#### `regex.escape <input>` and `regex.unescape <input>` 
-
-Respectively escape and unescape a regex pattern.
-
-```
-{{ "..." | regex.escape }}
-{{ `\.\.\.` | regex.unescape }}
-```
-
-Will output:
-
-```
-\.\.\.
-...
-```
-
-### 10.5 Object
-
-#### `typeof <value>`
-
-Returns the type of the specified value.
-
-```
-{{ null | object.typeof }}
-{{ true | object.typeof }}
-{{ 1 | object.typeof }}
-{{ 1.0 | object.typeof }}
-{{ "text" | object.typeof }}
-{{ 1..5 | object.typeof }}
-{{ [1,2,3,4,5] | object.typeof }}
-{{ {} | object.typeof }}
-{{ object | object.typeof }}
-```
-
-will output:
-
-```
-
-boolean
-number
-number
-string
-iterator
-array
-object
-object
-```
-
-### 10.6 Datetime
-
-#### Datetime object
-
-A datetime object represents an instant in time, expressed as a date and time of day. 
-
-| Name             | Description
-|--------------    |-----------------
-| `.year`          | Gets the year of a date object 
-| `.month`         | Gets the month of a date object
-| `.day`           | Gets the day in the month of a date object
-| `.day_of_year`   | Gets the day within the year
-| `.hour`          | Gets the hour of the date object
-| `.minute`        | Gets the minute of the date object
-| `.second`        | Gets the second of the date object
-| `.millisecond`   | Gets the millisecond of the date object
-
-#### Binary operations
-
-The substract operation `<date1> - <date2>`: Substract `date2` from `date1` and return a timespan internal object (see timespan object below).
-
-Other comparison operators (`==`, `!=`, `<=`, `>=`, `<`, `>`) are also working with date objects.  
-
-A `timespan` and also the added to a `datetime` object.
-
-#### `date.now` 
-
-Returns a datetime object of the current time, including the hour, minutes, seconds and milliseconds.
-
-```
-{{ date.now }}
-
-{{ date.now.year  # output the year of the current time }} 
-
-```
-
-#### `date.parse`
-
-Parses the specified input string to a date object. 
-
-```
-{{ date.parse '2016/01/05' }}
-```
-
-Will output:
-
-```
-5 Jan 2016
-```
-
-#### `date.add_days <days>`
-#### `date.add_months <months>`
-#### `date.add_years <years>`
-
-Adds the specified number days/months/years to the input date. 
-
-```
-{{ date.parse '2016/01/05' | date.add_days 1 }}
-{{ date.parse '2016/01/05' | date.add_months 1 }}
-{{ date.parse '2016/01/05' | date.add_years 1 }}
-
-```
-
-Will output:
-
-```
-6 Jan 2016
-5 Feb 2016
-5 Jan 2017
-```
-
-#### `date.to_string <format>?`
-
-Converts a datetime object to a textual representation using the specified format string.
-
-By default, if you are using a date, it will use the format specified by `date.format` which defaults to `date.default_format` (readonly) which default to `%d %b %Y`
-
-You can override the format used for formatting all dates by assigning the a new format: `date.format = '%a %b %e %T %Y';`
-
-You can recover the default format by using `date.format = date.default_format;`
-
-By default, the to_string format is using the **current culture**, but you can switch to an invariant culture by using the modifier `%g`
-
-For example, using `%g %d %b %Y` will output the date using an invariant culture.
-
-If you are using `%g` alone, it will output the date with `date.format` using an invariant culture.
-
-Suppose that `date.now` would return the date `2013-09-12 22:49:27 +0530`, the following table explains the format modifiers:
-
-| Format | Result        | Description
-|--------|---------------|--------------------------------------------
-| `"%a"` |  `"Thu"` 	   | Name of week day in short form of the
-| `"%A"` |  `"Thursday"` | Week day in full form of the time
-| `"%b"` |  `"Sep"` 	   | Month in short form of the time
-| `"%B"` |  `"September"`| Month in full form of the time
-| `"%c"` |               | Date and time (%a %b %e %T %Y)
-| `"%d"` |  `"12"` 	     | Day of the month of the time
-| `"%e"` |  `"12"`       | Day of the month, blank-padded ( 1..31)
-| `"%H"` |  `"22"`       | Hour of the time in 24 hour clock format
-| `"%I"` |  `"10"` 	     | Hour of the time in 12 hour clock format
-| `"%j"` |               | Day of the year (001..366) (3 digits, left padded with zero)
-| `"%m"` |  `"09"` 	     | Month of the time
-| `"%M"` |  `"49"` 	     | Minutes of the time (2 digits, left padded with zero e.g 01 02)
-| `"%p"` |  `"PM"` 	     | Gives AM / PM of the time
-| `"%S"` |  `"27"` 	     | Seconds of the time
-| `"%U"` |               | Week number of the current year, starting with the first Sunday as the first day of the first week (00..53)
-| `"%W"` |               | Week number of the current year, starting with the first Monday as the first day of the first week (00..53)
-| `"%w"` |  `"4"` 	     | Day of week of the time
-| `"%x"` |               | Preferred representation for the date alone, no time
-| `"%X"` |               | Preferred representation for the time alone, no date
-| `"%y"` |  `"13"` 	     | Gives year without century of the time
-| `"%Y"` |  `"2013"`     | Year of the time
-| `"%Z"` |  `"IST"` 	   | Gives Time Zone of the time
-| `"%%"` |  `"%"`        | Output the character `%`
-
-Note that the format is using a good part of the ruby format ([source](http://apidock.com/ruby/DateTime/strftime))
-
-```
-date.now | date.to_string `%d %b %Y`
-```
-
-will output:
-
-```
-5 Jan 2016
-```
-
-### 10.7 Timespan
-
-#### Timespan object
-
-A timespan object represents a time interval.
-
-| Name             | Description
-|--------------    |-----------------
-| `.days`          | Gets the number of days of this interval 
-| `.hours`         | Gets the number of hours of this interval
-| `.minutes`       | Gets the number of minutes of this interval
-| `.seconds`       | Gets the number of seconds of this interval
-| `.milliseconds`  | Gets the number of milliseconds of this interval 
-| `.total_days`    | Gets the total number of days in fractional part
-| `.total_hours`   | Gets the total number of hours in fractional part
-| `.total_minutes` | Gets the total number of minutes in fractional part
-| `.total_seconds` | Gets the total number of seconds  in fractional part
-| `.total_milliseconds` | Gets the total number of milliseconds  in fractional part
-
-#### Supported operators
-
-The `+` and `-` are both working with timespan interval objects.
-
-Other comparison operators (`==`, `!=`, `<=`, `>=`, `<`, `>`) are also working with timespan objects.  
-
-A `timespan` and also the added to a `datetime` object.
-
-#### `timespan.zero`
-
-Returns a timespan object that represents a 0 interval
-
-```
-{{ (timespan.zero + timespan.from_days 5).days }}
-```
-
-will output:
-   
-```
-5
-```
-
-#### `timespan.from_days <days>`
-
-Returns a timespan object that represents a `days` interval
-
-```
-{{ (timespan.from_days 5).days }}
-```
-
-will output:
-   
-```
-5
-```
-
-#### `timespan.from_hours <hours>`
-
-Returns a timespan object that represents a `hours` interval
-
-```
-{{ (timespan.from_hours 5).hours }}
-```
-
-will output:
-   
-```
-5
-```
-
-The same functions exists for `timespan.from_minutes`, `timespan_from_seconds`, `timespan.from_milliseconds`.
-
-#### `timespan.parse`
-
-Parses the specified input string into a timespan object. 
+[:top:](#language)

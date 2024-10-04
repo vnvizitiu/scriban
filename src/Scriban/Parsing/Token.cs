@@ -1,6 +1,9 @@
 // Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license. 
+// Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
+
+#nullable disable
+
 using System;
 
 namespace Scriban.Parsing
@@ -11,7 +14,12 @@ namespace Scriban.Parsing
     /// <seealso>
     ///     <cref>System.IEquatable{Scriban.Parsing.Token}</cref>
     /// </seealso>
-    public struct Token : IEquatable<Token>
+#if SCRIBAN_PUBLIC
+    public
+#else
+    internal
+#endif
+    struct Token : IEquatable<Token>
     {
         public static readonly Token Eof = new Token(TokenType.Eof, TextPosition.Eof, TextPosition.Eof);
 
@@ -24,7 +32,6 @@ namespace Scriban.Parsing
         /// <exception cref="System.ArgumentOutOfRangeException"></exception>
         public Token(TokenType type, TextPosition start, TextPosition end)
         {
-            if (start.Offset > end.Offset) throw new ArgumentOutOfRangeException(nameof(start), $"[{nameof(start)}] index must be <= to [{nameof(end)}]");
             Type = type;
             Start = start;
             End = end;
@@ -43,7 +50,7 @@ namespace Scriban.Parsing
         /// <summary>
         /// The end position of this token.
         /// </summary>
-        public readonly TextPosition End;
+        public TextPosition End;
 
         public override string ToString()
         {
@@ -63,6 +70,16 @@ namespace Scriban.Parsing
             }
 
             return "<error>";
+        }
+
+        public bool Match(string textToMatch, string lexerText)
+        {
+            var length = End.Offset - Start.Offset + 1;
+            if (textToMatch.Length != length)
+            {
+                return false;
+            }
+            return string.CompareOrdinal(textToMatch, 0, lexerText, Start.Offset, length) == 0;
         }
 
         public bool Equals(Token other)

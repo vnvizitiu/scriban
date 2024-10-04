@@ -1,130 +1,162 @@
-﻿// Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license. 
+// Copyright (c) Alexandre Mutel. All rights reserved.
+// Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
+
+#nullable disable
+
 using System;
 using System.Collections.Generic;
-using Scriban.Model;
 using Scriban.Parsing;
 using Scriban.Runtime;
+using Scriban.Syntax;
 
 namespace Scriban.Functions
 {
     /// <summary>
     /// The include function available through the function 'include' in scriban.
     /// </summary>
-    public sealed class IncludeFunction : IScriptCustomFunction
+#if SCRIBAN_PUBLIC
+    public
+#else
+    internal
+#endif
+    sealed partial class IncludeFunction : IScriptCustomFunction
     {
         public IncludeFunction()
         {
         }
 
-        public object Evaluate(TemplateContext context, ScriptNode callerContext, ScriptArray parameters, ScriptBlockStatement blockStatement)
+        public object Invoke(TemplateContext context, ScriptNode callerContext, ScriptArray arguments, ScriptBlockStatement blockStatement)
         {
-            if (parameters.Count == 0)
+            if (arguments.Count == 0)
             {
                 throw new ScriptRuntimeException(callerContext.Span, "Expecting at least the name of the template to include for the <include> function");
             }
 
-            string templateName = null;
-            try
-            {
-                templateName = ScriptValueConverter.ToString(callerContext.Span, parameters[0]);
-            }
-            catch (Exception ex)
-            {
-                throw new ScriptRuntimeException(callerContext.Span, $"Unexpected exception while converting first parameter for <include> function. Expecting a string", ex);
-            }
+            var templateName = context.ObjectToString(arguments[0]);
 
             // If template name is empty, throw an exception
-            if (templateName == null || string.IsNullOrEmpty(templateName = templateName.Trim()))
+            if (string.IsNullOrEmpty(templateName))
             {
+                // In a liquid template context, we let an include to continue without failing
+                if (context is LiquidTemplateContext)
+                {
+                    return null;
+                }
                 throw new ScriptRuntimeException(callerContext.Span, $"Include template name cannot be null or empty");
             }
 
-            // Compute a new parameters for the include
-            var newParameters = new ScriptArray(parameters.Count - 1);
-            for (int i = 1; i < parameters.Count; i++)
+            var templateLoader = context.TemplateLoader;
+            if (templateLoader == null)
             {
-                newParameters[i] = parameters[i];
+                throw new ScriptRuntimeException(callerContext.Span, $"Unable to include <{templateName}>. No TemplateLoader registered in TemplateContext.TemplateLoader");
             }
 
-            context.SetValue(ScriptVariable.Arguments, newParameters, true);
+            string templatePath;
+
+            try
+            {
+                templatePath = templateLoader.GetPath(context, callerContext.Span, templateName);
+            }
+            catch (Exception ex) when (!(ex is ScriptRuntimeException))
+            {
+                throw new ScriptRuntimeException(callerContext.Span, $"Unexpected exception while getting the path for the include name `{templateName}`", ex);
+            }
+            // If template path is empty (probably because template doesn't exist), throw an exception
+            if (templatePath == null)
+            {
+                throw new ScriptRuntimeException(callerContext.Span, $"Include template path is null for `{templateName}");
+            }
 
             Template template;
 
-            if (!context.CachedTemplates.TryGetValue(templateName, out template))
+            if (!context.CachedTemplates.TryGetValue(templatePath, out template))
             {
-                if (context.TemplateLoader == null)
+
+                string templateText;
+                try
                 {
-                    throw new ScriptRuntimeException(callerContext.Span,
-                        $"Unable to include <{templateName}>. No TemplateLoader registered in TemplateContext.Options.TemplateLoader");
+                    templateText = templateLoader.Load(context, callerContext.Span, templatePath);
                 }
-
-                string templateFilePath;
-
-                var templateText = context.TemplateLoader.Load(context, callerContext.Span, templateName, out templateFilePath);
+                catch (Exception ex) when (!(ex is ScriptRuntimeException))
+                {
+                    throw new ScriptRuntimeException(callerContext.Span, $"Unexpected exception while loading the include `{templateName}` from path `{templatePath}`", ex);
+                }
 
                 if (templateText == null)
                 {
-                    throw new ScriptRuntimeException(callerContext.Span, $"The result of including <{templateName}> cannot be null");
+                    throw new ScriptRuntimeException(callerContext.Span, $"The result of including `{templateName}->{templatePath}` cannot be null");
                 }
 
-                // IF template file path is not defined, we use the template name instead
-                templateFilePath = templateFilePath ?? templateName;
-
                 // Clone parser options
-                var parserOptions = context.TemplateLoaderParserOptions.Clone();
-
+                var parserOptions = context.TemplateLoaderParserOptions;
                 var lexerOptions = context.TemplateLoaderLexerOptions;
-                // Parse include in default modes (while top page can be using front matter)
-                lexerOptions.Mode = lexerOptions.Mode == ScriptMode.ScriptOnly
-                    ? ScriptMode.ScriptOnly
-                    : ScriptMode.Default;
-
-                template = Template.Parse(templateText, templateFilePath, parserOptions, lexerOptions);
+                template = Template.Parse(templateText, templatePath, parserOptions, lexerOptions);
 
                 // If the template has any errors, throw an exception
                 if (template.HasErrors)
                 {
-                    throw new ScriptParserRuntimeException(callerContext.Span, $"Error while parsing template <{templateName}> from [{templateFilePath}]", template.Messages);
+                    throw new ScriptParserRuntimeException(callerContext.Span, $"Error while parsing template `{templateName}` from `{templatePath}`", template.Messages);
                 }
 
-                context.CachedTemplates.Add(templateName, template);
-            }
-
-            // Query the pending includes stored in the context
-            HashSet<string> pendingIncludes;
-            object pendingIncludesObject;
-            if (!context.Tags.TryGetValue(typeof(IncludeFunction), out pendingIncludesObject))
-            {
-                pendingIncludesObject = pendingIncludes = new HashSet<string>();
-                context.Tags[typeof (IncludeFunction)] = pendingIncludesObject;
-            }
-            else
-            {
-                pendingIncludes = (HashSet<string>) pendingIncludesObject;
+                context.CachedTemplates.Add(templatePath, template);
             }
 
             // Make sure that we cannot recursively include a template
-            if (pendingIncludes.Contains(templateName))
-            {
-                throw new ScriptRuntimeException(callerContext.Span, $"The include [{templateName}] cannot be used recursively");
-            }
-            pendingIncludes.Add(templateName);
-
-            context.PushOutput();
             object result = null;
+            context.EnterRecursive(callerContext);
+            var previousIndent = context.CurrentIndent;
+            context.CurrentIndent = null;
+            context.PushOutput();
+            var previousArguments = context.GetValue(ScriptVariable.Arguments);
             try
             {
-                template.Render(context);
+                context.SetValue(ScriptVariable.Arguments, arguments, true, true);
+                if (previousIndent != null)
+                {
+                    // We reset before and after the fact that we have a new line
+                    context.ResetPreviousNewLine();
+                }
+                result = template.Render(context);
+                if (previousIndent != null)
+                {
+                    context.ResetPreviousNewLine();
+                }
             }
             finally
             {
-                result = context.PopOutput();
-                pendingIncludes.Remove(templateName);
-            }
+                context.PopOutput();
+                context.CurrentIndent = previousIndent;
+                context.ExitRecursive(callerContext);
 
+                // Remove the arguments
+                context.DeleteValue(ScriptVariable.Arguments);
+                if (previousArguments != null)
+                {
+                    // Restore them if necessary
+                    context.SetValue(ScriptVariable.Arguments, previousArguments, true);
+                }
+            }
             return result;
+        }
+
+        public int RequiredParameterCount => 1;
+
+        public int ParameterCount => 1;
+
+        public ScriptVarParamKind VarParamKind => ScriptVarParamKind.Direct;
+
+        public Type ReturnType => typeof(object);
+
+        public ScriptParameterInfo GetParameterInfo(int index)
+        {
+            if (index == 0) return new ScriptParameterInfo(typeof(string), "template_name");
+            return new ScriptParameterInfo(typeof(object), "value");
+        }
+
+        public int GetParameterIndexByName(string name)
+        {
+            throw new NotImplementedException();
         }
     }
 }

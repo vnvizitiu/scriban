@@ -1,12 +1,17 @@
-﻿// Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license. 
+// Copyright (c) Alexandre Mutel. All rights reserved.
+// Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 using System;
 using System.Text;
 
 namespace Scriban.Parsing
 {
-    public class LogMessage
+#if SCRIBAN_PUBLIC
+    public
+#else
+    internal
+#endif
+    class LogMessage
     {
         public LogMessage(ParserMessageType type, SourceSpan span, string message)
         {
@@ -26,17 +31,7 @@ namespace Scriban.Parsing
             var builder = new StringBuilder();
             builder.Append(Span.ToStringSimple());
             builder.Append(" : ");
-            switch (Type)
-            {
-                case ParserMessageType.Error:
-                    builder.Append("error");
-                    break;
-                case ParserMessageType.Warning:
-                    builder.Append("warning");
-                    break;
-                default:
-                    throw new InvalidOperationException($"Message type [{Type}] not supported");
-            }
+            builder.Append(Type.ToString().ToLowerInvariant());
             builder.Append(" : ");
             if (Message != null)
             {
@@ -46,7 +41,12 @@ namespace Scriban.Parsing
         }
     }
 
-    public enum ParserMessageType
+#if SCRIBAN_PUBLIC
+    public
+#else
+    internal
+#endif
+    enum ParserMessageType
     {
         Error,
 

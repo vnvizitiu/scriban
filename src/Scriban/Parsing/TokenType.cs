@@ -1,26 +1,45 @@
 // Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license. 
+// Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 namespace Scriban.Parsing
 {
     /// <summary>
     /// An enumeration to categorize tokens.
     /// </summary>
-    public enum TokenType
+#if SCRIBAN_PUBLIC
+    public
+#else
+    internal
+#endif
+    enum TokenType
     {
         Invalid,
 
         FrontMatterMarker,
 
-        [TokenText("{{")]
+        /// <summary>Token "{{"</summary>
         CodeEnter,
 
-        [TokenText("}}")]
+        /// <summary>Token "{%"</summary>
+        LiquidTagEnter,
+
+        /// <summary>Token "}}"</summary>
         CodeExit,
 
+        /// <summary>Token "%}"</summary>
+        LiquidTagExit,
+
         Raw,
+        Escape,
+
+        EscapeEnter,
+        EscapeExit,
 
         NewLine,
+
+        Whitespace,
+
+        WhitespaceFull,
 
         Comment,
 
@@ -42,6 +61,16 @@ namespace Scriban.Parsing
         Integer,
 
         /// <summary>
+        /// A Hexadecimal integer (int, long...)
+        /// </summary>
+        HexaInteger,
+
+        /// <summary>
+        /// A binary integer (int, long...)
+        /// </summary>
+        BinaryInteger,
+
+        /// <summary>
         /// A floating point number
         /// </summary>
         Float,
@@ -52,108 +81,201 @@ namespace Scriban.Parsing
         String,
 
         /// <summary>
+        /// An interpolated string without interpolated expressions (e.g $"This is a string with no interpolated expressions")
+        /// </summary>
+        InterpolatedString,
+
+        /// <summary>
+        /// An interpolated string at the beginning (e.g $"This is a string with { )
+        /// </summary>
+        BeginInterpolatedString,
+
+        /// <summary>
+        /// An interpolated string at the middle (e.g } a continuation string { )
+        /// </summary>
+        ContinuationInterpolatedString,
+
+        /// <summary>
+        /// An interpolated string at the end (e.g } a ending of an interpolated string" )
+        /// </summary>
+        EndingInterpolatedString,
+
+        /// <summary>
+        /// An implicit string with quotes
+        /// </summary>
+        ImplicitString,
+
+        /// <summary>
         /// A verbatim string
         /// </summary>
         VerbatimString,
 
-        [TokenText(";")]
+        /// <summary>Token ";"</summary>
         SemiColon,
 
-        [TokenText("@")]
+        /// <summary>Token "@"</summary>
         Arroba,
 
-        [TokenText("^")]
+        /// <summary>Token "^"</summary>
         Caret,
 
-        [TokenText(":")]
+        /// <summary>Token "^^"</summary>
+        DoubleCaret,
+
+        /// <summary>Token ":"</summary>
         Colon,
 
-        [TokenText("=")]
+        /// <summary>Token "="</summary>
         Equal,
 
-        [TokenText("|")]
-        Pipe,  // |
+        /// <summary>Token "|"</summary>
+        VerticalBar, // |
 
-        [TokenText("!")]
-        Not, // !
+        /// <summary>Token "|>"</summary>
+        PipeGreater, // |>
 
-        [TokenText("&&")]
-        And, // &&
+        /// <summary>Token "!"</summary>
+        Exclamation, // !
 
-        [TokenText("||")]
-        Or,  // ||
+        /// <summary>Token "&amp;&amp;"</summary>
+        DoubleAmp, // &&
 
-        [TokenText("??")]
-        EmptyCoalescing,
+        /// <summary>Token "||"</summary>
+        DoubleVerticalBar, // ||
 
-        [TokenText("==")]
-        CompareEqual,
+        /// <summary>Token "&amp;"</summary>
+        Amp, // &
 
-        [TokenText("!=")]
-        CompareNotEqual,
+        /// <summary>Token "?"</summary>
+        Question,
 
-        [TokenText("<")]
-        CompareLess,
+        /// <summary>Token "??"</summary>
+        DoubleQuestion,
 
-        [TokenText(">")]
-        CompareGreater,
+        /// <summary>Token "?."</summary>
+        QuestionDot,
 
-        [TokenText("<=")]
-        CompareLessOrEqual,
+        /// <summary>Token "?!"</summary>
+        QuestionExclamation,
 
-        [TokenText(">=")]
-        CompareGreaterOrEqual,
+        /// <summary>Token "=="</summary>
+        DoubleEqual,
 
-        [TokenText("/")]
+        /// <summary>Token "!="</summary>
+        ExclamationEqual,
+
+        /// <summary>Token "&lt;"</summary>
+        Less,
+
+        /// <summary>Token ">"</summary>
+        Greater,
+
+        /// <summary>Token "&lt;="</summary>
+        LessEqual,
+
+        /// <summary>Token ">="</summary>
+        GreaterEqual,
+
+        /// <summary>Token "/"</summary>
         Divide,
 
-        [TokenText("//")]
+        /// <summary>Token "/="</summary>
+        DivideEqual,
+
+        /// <summary>Token "//"</summary>
         DoubleDivide,
 
-        [TokenText("*")]
-        Multiply,
+        /// <summary>Token "//="</summary>
+        DoubleDivideEqual,
 
-        [TokenText("+")]
+        /// <summary>Token "*"</summary>
+        Asterisk,
+
+        /// <summary>Token "*="</summary>
+        AsteriskEqual,
+
+        /// <summary>Token "+"</summary>
         Plus,
 
-        [TokenText("-")]
+        /// <summary>Token "+="</summary>
+        PlusEqual,
+
+        /// <summary>Token "++"</summary>
+        DoublePlus,
+
+        /// <summary>Token "-"</summary>
         Minus,
 
-        [TokenText("%")]
-        Modulus,
+        /// <summary>Token "-="</summary>
+        MinusEqual,
 
-        [TokenText("<<")]
-        ShiftLeft,
+        /// <summary>Token "--"</summary>
+        DoubleMinus,
 
-        [TokenText(">>")]
-        ShiftRight,
+        /// <summary>Token "%"</summary>
+        Percent,
 
-        [TokenText(",")]
+        /// <summary>Token "%="</summary>
+        PercentEqual,
+
+        /// <summary>Token "&lt;&lt;"</summary>
+        DoubleLessThan,
+
+        /// <summary>Token ">>"</summary>
+        DoubleGreaterThan,
+
+        /// <summary>Token ","</summary>
         Comma,
 
-        [TokenText(".")]
+        /// <summary>Token "."</summary>
         Dot,
 
-        [TokenText("..")]
+        /// <summary>Token ".."</summary>
         DoubleDot,
 
-        [TokenText("..<")]
+        /// <summary>Token "..."</summary>
+        TripleDot,
+
+        /// <summary>Token "..&lt;"</summary>
         DoubleDotLess,
 
-        [TokenText("(")]
-        OpenParent,
-        [TokenText(")")]
-        CloseParent,
+        /// <summary>Token "("</summary>
+        OpenParen,
 
-        [TokenText("{")]
+        /// <summary>Token ")"</summary>
+        CloseParen,
+
+        /// <summary>Token "{"</summary>
         OpenBrace,
-        [TokenText("}")]
+
+        /// <summary>Token "}"</summary>
         CloseBrace,
 
-        [TokenText("[")]
+        /// <summary>Token "["</summary>
         OpenBracket,
-        [TokenText("]")]
+
+        /// <summary>Token "]"</summary>
         CloseBracket,
+
+        /// <summary>Token "{"</summary>
+        OpenInterpolatedBrace,
+
+        /// <summary>Token "}"</summary>
+        CloseInterpolatedBrace,
+
+        /// <summary>
+        /// Custom token
+        /// </summary>
+        Custom,
+        Custom1,
+        Custom2,
+        Custom3,
+        Custom4,
+        Custom5,
+        Custom6,
+        Custom7,
+        Custom8,
+        Custom9,
 
         Eof,
     }

@@ -1,15 +1,28 @@
 // Copyright (c) Alexandre Mutel. All rights reserved.
-// Licensed under the BSD-Clause 2 license. 
+// Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 using System.Collections.Generic;
+using Scriban.Parsing;
 
 namespace Scriban.Runtime
 {
     /// <summary>
     /// Base interface for a scriptable object.
     /// </summary>
-    public interface IScriptObject
+#if SCRIBAN_PUBLIC
+    public
+#else
+    internal
+#endif
+    interface IScriptObject
     {
+        /// <summary>
+        /// Gets the number of members
+        /// </summary>
+        int Count { get; }
+
+        IEnumerable<string> GetMembers();
+
         /// <summary>
         /// Determines whether this object contains the specified member.
         /// </summary>
@@ -27,12 +40,12 @@ namespace Scriban.Runtime
         /// <summary>
         /// Tries the get the value of the specified member.
         /// </summary>
+        /// <param name="context"></param>
+        /// <param name="span"></param>
         /// <param name="member">The member.</param>
         /// <param name="value">The value.</param>
         /// <returns><c>true</c> if the value was retrieved</returns>
-        bool TryGetValue(string member, out object value);
-
-        object this[string key] { get; set; }
+        bool TryGetValue(TemplateContext context, SourceSpan span, string member, out object value);
 
         /// <summary>
         /// Determines whether the specified member is read-only.
@@ -44,10 +57,12 @@ namespace Scriban.Runtime
         /// <summary>
         /// Sets the value and readonly state of the specified member. This method overrides previous readonly state.
         /// </summary>
+        /// <param name="context"></param>
+        /// <param name="span"></param>
         /// <param name="member">The member.</param>
         /// <param name="value">The value.</param>
         /// <param name="readOnly">if set to <c>true</c> the value will be read only.</param>
-        void SetValue(string member, object value, bool readOnly);
+        bool TrySetValue(TemplateContext context, SourceSpan span, string member, object value, bool readOnly);
 
         /// <summary>
         /// Removes the specified member from this object.
@@ -62,5 +77,12 @@ namespace Scriban.Runtime
         /// <param name="member">The member.</param>
         /// <param name="readOnly">if set to <c>true</c> the value will be read only.</param>
         void SetReadOnly(string member, bool readOnly);
+
+        /// <summary>
+        /// Clones this instance.
+        /// </summary>
+        /// <param name="deep">Clones this instance deeply</param>
+        /// <returns>A clone of this instance</returns>
+        IScriptObject Clone(bool deep);
     }
 }
